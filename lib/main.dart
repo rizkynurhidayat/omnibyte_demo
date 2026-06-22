@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omnibyte_demo/firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/pages/home_page.dart';
 // import 'package:firebase_core/firebase_core.dart';
@@ -9,7 +11,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Setup Firebase (Uncomment setelah mengonfigurasi Firebase via Flutterfire CLI)
-  /*
+  
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -17,7 +19,7 @@ void main() async {
   } catch (e) {
     debugPrint("Firebase Initialization Error: $e");
   }
-  */
+  
 
 
   // Memaksa status bar hitam secara global
