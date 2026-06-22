@@ -1,4 +1,4 @@
-package com.example.omnibyte_demo
+package com.omniabyte.app.test
 
 import io.flutter.embedding.android.FlutterActivity
 
