@@ -6,6 +6,18 @@ import '../../data/datasources/scanner_remote_data_source.dart';
 import '../../data/repositories/scanner_repository_impl.dart';
 import '../../domain/usecases/submit_selfie_with_ktp_usecase.dart';
 
+// =========================================================================
+// KONFIGURASI UKURAN OVERLAY KAMERA
+// Silakan ubah angka-angka di bawah ini untuk menyesuaikan ukuran bingkai
+// (Angka merupakan rasio persentase dari layar kamera, contoh: 0.55 = 55%)
+// =========================================================================
+const double kFaceOverlayWidthRatio = 0.55;
+const double kFaceOverlayHeightRatio = 0.30;
+const double kFaceOverlayCenterYRatio = 0.30; // Posisi vertikal Wajah (semakin kecil semakin ke atas)
+
+const double kKtpOverlayWidthRatio = 0.50;
+const double kKtpOverlayHeightRatio = 0.15;
+const double kKtpOverlayCenterYRatio = 0.75; // Posisi vertikal KTP (semakin besar semakin ke bawah)
 class DemoScannerPage extends StatefulWidget {
   const DemoScannerPage({super.key});
 
@@ -126,6 +138,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
+          backgroundColor:  Colors.white,
           title: Text(title),
           content: Text(message),
           actions: [
@@ -205,8 +218,8 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24.0),
                     child: AspectRatio(
-                      // aspectRatio: 9 / 16,
-                      aspectRatio: 3 / 4,
+                      aspectRatio: 9 / 16,
+                      // aspectRatio: 3 / 4,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.grey[900],
@@ -241,7 +254,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                                       ),
                                       SizedBox(height: 16),
                                       Text(
-                                        'Mengunggah Gambar ke API...',
+                                        'Mengunggah Gambar...',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -327,20 +340,20 @@ class SelfieKtpOverlayPainter extends CustomPainter {
       ..strokeWidth = 2.5;
 
     // 1. Gambar Oval untuk Wajah di posisi atas
-    final faceCenterY = size.height * 0.35; // agak ke atas
+    final faceCenterY = size.height * kFaceOverlayCenterYRatio;
     final faceRect = Rect.fromCenter(
       center: Offset(size.width / 2, faceCenterY),
-      width: size.width * 0.55,
-      height: size.height * 0.40,
+      width: size.width * kFaceOverlayWidthRatio,
+      height: size.height * kFaceOverlayHeightRatio,
     );
     canvas.drawOval(faceRect, paint);
 
     // 2. Gambar Persegi Panjang untuk KTP di posisi bawah/dada
-    final ktpCenterY = size.height * 0.75;
+    final ktpCenterY = size.height * kKtpOverlayCenterYRatio;
     final ktpRect = Rect.fromCenter(
       center: Offset(size.width / 2, ktpCenterY),
-      width: size.width * 0.70,
-      height: size.height * 0.25,
+      width: size.width * kKtpOverlayWidthRatio,
+      height: size.height * kKtpOverlayHeightRatio,
     );
     final ktpRRect = RRect.fromRectAndRadius(
       ktpRect,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -11,7 +12,8 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, dynamic>> _messages = [
     {
-      'text': 'Halo! Ada yang bisa kami bantu terkait demo pemindaian wajah atau KTP?',
+      'text':
+          'Halo! Ada yang bisa kami bantu terkait demo pemindaian wajah atau KTP?',
       'isMe': false,
       'time': '10:00',
     },
@@ -19,16 +21,12 @@ class _ChatPageState extends State<ChatPage> {
 
   void _sendMessage() {
     if (_controller.text.trim().isEmpty) return;
-    
+
     final text = _controller.text.trim();
     _controller.clear();
-    
+
     setState(() {
-      _messages.add({
-        'text': text,
-        'isMe': true,
-        'time': '10:02',
-      });
+      _messages.add({'text': text, 'isMe': true, 'time': '10:02'});
     });
 
     // Simulasi jawaban otomatis (auto-reply)
@@ -36,7 +34,8 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       setState(() {
         _messages.add({
-          'text': 'Terima kasih atas pesan Anda. Tim support kami akan segera merespon pertanyaan mengenai: "$text".',
+          'text':
+              'Terima kasih atas pesan Anda. Tim support kami akan segera merespon pertanyaan mengenai: "$text".',
           'isMe': false,
           'time': '10:03',
         });
@@ -52,6 +51,7 @@ class _ChatPageState extends State<ChatPage> {
       appBar: AppBar(
         title: const Text('Customer Support'),
         elevation: 1,
+       
       ),
       body: Column(
         children: [
@@ -63,24 +63,33 @@ class _ChatPageState extends State<ChatPage> {
               itemBuilder: (context, index) {
                 final message = _messages[index];
                 final isMe = message['isMe'] as bool;
-                
+
                 return Align(
-                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: isMe
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Container(
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.75,
                     ),
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
-                      color: isMe 
-                          ? theme.colorScheme.primary 
+                      color: isMe
+                          ? theme.colorScheme.primary
                           : theme.colorScheme.primary.withAlpha(25),
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
-                        bottomLeft: isMe ? const Radius.circular(16) : Radius.zero,
-                        bottomRight: isMe ? Radius.zero : const Radius.circular(16),
+                        bottomLeft: isMe
+                            ? const Radius.circular(16)
+                            : Radius.zero,
+                        bottomRight: isMe
+                            ? Radius.zero
+                            : const Radius.circular(16),
                       ),
                     ),
                     child: Column(
@@ -111,7 +120,7 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
           ),
-          
+
           // Panel Input Chat
           Container(
             padding: const EdgeInsets.all(12),
@@ -122,8 +131,8 @@ class _ChatPageState extends State<ChatPage> {
                   color: Colors.black.withAlpha(15),
                   blurRadius: 10,
                   offset: const Offset(0, -2),
-                )
-              ]
+                ),
+              ],
             ),
             child: SafeArea(
               child: Row(
@@ -133,7 +142,10 @@ class _ChatPageState extends State<ChatPage> {
                       controller: _controller,
                       decoration: InputDecoration(
                         hintText: 'Tulis pesan...',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide(
@@ -150,14 +162,18 @@ class _ChatPageState extends State<ChatPage> {
                   CircleAvatar(
                     backgroundColor: theme.colorScheme.primary,
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                       onPressed: _sendMessage,
                     ),
                   ),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/pages/home_page.dart';
 // import 'package:firebase_core/firebase_core.dart';
@@ -18,6 +19,15 @@ void main() async {
   }
   */
 
+
+  // Memaksa status bar hitam secara global
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.black,
+      statusBarIconBrightness: Brightness.light, 
+    ),
+  );
+
   runApp(const MyApp());
 }
 
@@ -30,7 +40,7 @@ class MyApp extends StatelessWidget {
       title: 'OmniByte Demo App',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      // darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system, // Menyesuaikan dengan setelan mode perangkat (Light/Dark)
       home: const HomePage(),
     );
