@@ -1,21 +1,26 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omnibyte_demo/core/services/notification_service.dart';
 import 'package:omnibyte_demo/firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/pages/home_page.dart';
-// import 'package:firebase_core/firebase_core.dart';
-// import 'firebase_options.dart'; // Jalankan 'flutterfire configure' untuk generate file ini
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Setup Firebase (Uncomment setelah mengonfigurasi Firebase via Flutterfire CLI)
-  
   try {
+    // 1. Initialize Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // 2. Register background handler for FCM
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // 3. Initialize FCM and local notification service
+    await NotificationService.instance.initialize();
   } catch (e) {
     debugPrint("Firebase Initialization Error: $e");
   }
