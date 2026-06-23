@@ -13,11 +13,14 @@ import '../../domain/usecases/submit_selfie_with_ktp_usecase.dart';
 // =========================================================================
 const double kFaceOverlayWidthRatio = 0.55;
 const double kFaceOverlayHeightRatio = 0.30;
-const double kFaceOverlayCenterYRatio = 0.30; // Posisi vertikal Wajah (semakin kecil semakin ke atas)
+const double kFaceOverlayCenterYRatio =
+    0.30; // Posisi vertikal Wajah (semakin kecil semakin ke atas)
 
 const double kKtpOverlayWidthRatio = 0.50;
 const double kKtpOverlayHeightRatio = 0.15;
-const double kKtpOverlayCenterYRatio = 0.75; // Posisi vertikal KTP (semakin besar semakin ke bawah)
+const double kKtpOverlayCenterYRatio =
+    0.75; // Posisi vertikal KTP (semakin besar semakin ke bawah)
+
 class DemoScannerPage extends StatefulWidget {
   const DemoScannerPage({super.key});
 
@@ -30,6 +33,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   bool _isPermissionGranted = false;
   bool _isCameraInitialized = false;
   bool _isUploading = false;
+  CameraLensDirection _currentLensDirection = CameraLensDirection.back;
 
   // Inisialisasi UseCase secara langsung (Untuk di-refactor ke Dependency Injection/BLoC nanti)
   late final SubmitSelfieWithKtpUseCase _submitUseCase;
@@ -57,9 +61,9 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
       try {
         final cameras = await availableCameras();
         if (cameras.isNotEmpty) {
-          // Gunakan kamera depan karena ini selfie sambil pegang KTP
+          // Gunakan kamera sesuai state yang terpilih
           final camera = cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
+            (c) => c.lensDirection == _currentLensDirection,
             orElse: () => cameras.first,
           );
 
@@ -80,6 +84,21 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
         debugPrint('Error initializing camera: $e');
       }
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_isUploading) return;
+    setState(() {
+      _currentLensDirection = _currentLensDirection == CameraLensDirection.back
+          ? CameraLensDirection.front
+          : CameraLensDirection.back;
+      _isCameraInitialized = false;
+    });
+
+    await _cameraController?.dispose();
+    _cameraController = null;
+
+    await _checkPermissionAndInitCamera();
   }
 
   Future<void> _captureAndUploadImage() async {
@@ -138,7 +157,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          backgroundColor:  Colors.white,
+          backgroundColor: Colors.white,
           title: Text(title),
           content: Text(message),
           actions: [
@@ -193,7 +212,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                     },
                     icon: Icon(Icons.arrow_back_rounded),
                   ),
-                  SizedBox(width: 85),
+                  SizedBox(width: MediaQuery.of(context).size.width * 0.15),
                   Text(
                     "Demo Scanner",
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -201,6 +220,11 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                     ),
                   ),
                   Spacer(),
+                  IconButton(
+                    onPressed: _switchCamera,
+                    icon: const Icon(Icons.flip_camera_android),
+                  ),
+                  SizedBox(width: 15),
                 ],
               ),
               // Petunjuk

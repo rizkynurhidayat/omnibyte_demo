@@ -95,7 +95,7 @@ class HomePage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Pindai wajah dan kartu identitas dengan teknologi OCR dan Deteksi Keaktifan (Liveness) pihak ketiga secara aman.',
+                        'Pindai wajah dan kartu identitas dengan teknologi OCR dan Deteksi Keaktifan (Liveness)',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withAlpha(220),
                           height: 1.4,
