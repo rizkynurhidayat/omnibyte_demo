@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../../../../core/utils/permission_helper.dart';
 import '../../data/datasources/scanner_remote_data_source.dart';
 import '../../data/repositories/scanner_repository_impl.dart';
@@ -34,6 +38,23 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   bool _isCameraInitialized = false;
   bool _isUploading = false;
   CameraLensDirection _currentLensDirection = CameraLensDirection.back;
+
+  final FaceDetector _faceDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      enableContours: false,
+      enableClassification: false,
+      enableTracking: false,
+    ),
+  );
+  bool _isFaceDetected = false;
+  bool _isProcessingImage = false;
+
+  final Map<DeviceOrientation, int> _orientations = {
+    DeviceOrientation.portraitUp: 0,
+    DeviceOrientation.landscapeLeft: 90,
+    DeviceOrientation.portraitDown: 180,
+    DeviceOrientation.landscapeRight: 270,
+  };
 
   // Inisialisasi UseCase secara langsung (Untuk di-refactor ke Dependency Injection/BLoC nanti)
   late final SubmitSelfieWithKtpUseCase _submitUseCase;
@@ -71,6 +92,9 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
             camera,
             ResolutionPreset.high,
             enableAudio: false,
+            imageFormatGroup: Platform.isAndroid
+                ? ImageFormatGroup.nv21
+                : ImageFormatGroup.bgra8888,
           );
 
           await _cameraController!.initialize();
@@ -78,6 +102,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
             setState(() {
               _isCameraInitialized = true;
             });
+            _startImageStream();
           }
         }
       } catch (e) {
@@ -93,12 +118,87 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
           ? CameraLensDirection.front
           : CameraLensDirection.back;
       _isCameraInitialized = false;
+      _isFaceDetected = false;
     });
 
+    try {
+      await _cameraController?.stopImageStream();
+    } catch (_) {}
     await _cameraController?.dispose();
     _cameraController = null;
 
     await _checkPermissionAndInitCamera();
+  }
+
+  void _startImageStream() {
+    if (_cameraController == null || !_isCameraInitialized) return;
+
+    _cameraController!.startImageStream((CameraImage image) async {
+      if (_isProcessingImage) return;
+      _isProcessingImage = true;
+
+      try {
+        final inputImage = _inputImageFromCameraImage(image);
+        if (inputImage != null) {
+          final faces = await _faceDetector.processImage(inputImage);
+          if (mounted) {
+            setState(() {
+              _isFaceDetected = faces.isNotEmpty;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error processing image for face detection: $e');
+      } finally {
+        _isProcessingImage = false;
+      }
+    });
+  }
+
+  InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (_cameraController == null) return null;
+
+    final camera = _cameraController!.description;
+    final sensorOrientation = camera.sensorOrientation;
+
+    InputImageRotation? rotation;
+    if (Platform.isIOS) {
+      rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+    } else if (Platform.isAndroid) {
+      var rotationCompensation =
+          _orientations[_cameraController!.value.deviceOrientation];
+      if (rotationCompensation == null) return null;
+      if (camera.lensDirection == CameraLensDirection.front) {
+        rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
+      } else {
+        rotationCompensation =
+            (sensorOrientation - rotationCompensation + 360) % 360;
+      }
+      rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
+    }
+
+    if (rotation == null) return null;
+
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == null) return null;
+
+    if (image.planes.length != 1 && image.planes.length != 3) return null;
+
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: format,
+        bytesPerRow: image.planes[0].bytesPerRow,
+      ),
+    );
   }
 
   Future<void> _captureAndUploadImage() async {
@@ -112,6 +212,9 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
       String imagePath = "simulated_path.jpg"; // Path fallback
 
       if (_isCameraInitialized && _cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+        } catch (_) {}
         // Ambil gambar beneran menggunakan package camera
         final XFile file = await _cameraController!.takePicture();
         imagePath = file.path;
@@ -176,7 +279,11 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
 
   @override
   void dispose() {
+    try {
+      _cameraController?.stopImageStream();
+    } catch (_) {}
     _cameraController?.dispose();
+    _faceDetector.close();
     super.dispose();
   }
 
@@ -264,6 +371,51 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                               size: Size.infinite,
                               painter: SelfieKtpOverlayPainter(),
                             ),
+
+                            // Notifikasi Deteksi Wajah
+                            if (_isCameraInitialized)
+                              Positioned(
+                                top: 16,
+                                left: 16,
+                                right: 16,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _isFaceDetected
+                                          ? Colors.green.withAlpha(204)
+                                          : Colors.red.withAlpha(204),
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _isFaceDetected
+                                              ? Icons.check_circle
+                                              : Icons.warning,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _isFaceDetected
+                                              ? 'Wajah Terdeteksi'
+                                              : 'Wajah Tidak Terdeteksi',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
 
                             // Loading Indicator saat upload
                             if (_isUploading)
