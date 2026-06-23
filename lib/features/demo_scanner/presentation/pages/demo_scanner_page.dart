@@ -38,6 +38,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   bool _isCameraInitialized = false;
   bool _isUploading = false;
   CameraLensDirection _currentLensDirection = CameraLensDirection.back;
+  String? _capturedImagePath;
 
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -201,12 +202,8 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
     );
   }
 
-  Future<void> _captureAndUploadImage() async {
+  Future<void> _captureImage() async {
     if (_isUploading) return;
-
-    setState(() {
-      _isUploading = true;
-    });
 
     try {
       String imagePath = "simulated_path.jpg"; // Path fallback
@@ -223,8 +220,36 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
+      setState(() {
+        _capturedImagePath = imagePath;
+      });
+    } catch (e) {
+      debugPrint('Error capturing image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal mengambil gambar')),
+        );
+      }
+    }
+  }
+
+  void _retakeImage() {
+    setState(() {
+      _capturedImagePath = null;
+    });
+    _startImageStream();
+  }
+
+  Future<void> _uploadImage() async {
+    if (_isUploading || _capturedImagePath == null) return;
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
       // Panggil API (Akan mengembalikan Dummy Response sesuai setup)
-      final result = await _submitUseCase(imagePath);
+      final result = await _submitUseCase(_capturedImagePath!);
 
       if (!mounted) return;
 
@@ -238,6 +263,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
         (entity) {
           setState(() {
             _isUploading = false;
+            _capturedImagePath = null; // Reset pratinjau setelah berhasil
           });
           _showResultDialog(
             'SUKSES!',
@@ -251,6 +277,37 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
         _isUploading = false;
       });
       _showResultDialog('Error', 'Terjadi kesalahan sistem.');
+    }
+  }
+
+  Widget _buildCapturedPreview() {
+    if (_capturedImagePath == "simulated_path.jpg") {
+      return Container(
+        color: Colors.grey[850],
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 80, color: Colors.greenAccent),
+            SizedBox(height: 16),
+            Text(
+              'Pratinjau Hasil Foto (Simulator)',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Gambar berhasil disimulasikan.',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Image.file(
+        File(_capturedImagePath!),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
     }
   }
 
@@ -328,8 +385,11 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                   ),
                   Spacer(),
                   IconButton(
-                    onPressed: _switchCamera,
-                    icon: const Icon(Icons.flip_camera_android),
+                    onPressed: _capturedImagePath != null || _isUploading ? null : _switchCamera,
+                    icon: Icon(
+                      Icons.flip_camera_android,
+                      color: _capturedImagePath != null || _isUploading ? Colors.grey : null,
+                    ),
                   ),
                   SizedBox(width: 15),
                 ],
@@ -361,19 +421,22 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            // Pratinjau Kamera
-                            _isCameraInitialized && _cameraController != null
-                                ? CameraPreview(_cameraController!)
-                                : _buildMockCameraPreview(),
+                            // Pratinjau Kamera / Foto Hasil
+                            _capturedImagePath != null
+                                ? _buildCapturedPreview()
+                                : (_isCameraInitialized && _cameraController != null
+                                    ? CameraPreview(_cameraController!)
+                                    : _buildMockCameraPreview()),
 
-                            // Overlay Selfie + KTP 1 Frame
-                            CustomPaint(
-                              size: Size.infinite,
-                              painter: SelfieKtpOverlayPainter(),
-                            ),
+                            // Overlay Selfie + KTP 1 Frame (Hanya tampil saat mode kamera)
+                            if (_capturedImagePath == null)
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: SelfieKtpOverlayPainter(),
+                              ),
 
-                            // Notifikasi Deteksi Wajah
-                            if (_isCameraInitialized)
+                            // Notifikasi Deteksi Wajah (Hanya tampil saat mode kamera)
+                            if (_isCameraInitialized && _capturedImagePath == null)
                               Positioned(
                                 top: 16,
                                 left: 16,
@@ -453,28 +516,81 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   children: [
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton.icon(
-                        onPressed: _isUploading ? null : _captureAndUploadImage,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                    if (_capturedImagePath == null)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton.icon(
+                          onPressed: _isUploading ? null : _captureImage,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          icon: const Icon(Icons.camera_alt),
+                          label: const Text(
+                            'Ambil Foto',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text(
-                          'Ambil & Kirim',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: OutlinedButton.icon(
+                                onPressed: _isUploading ? null : _retakeImage,
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: theme.colorScheme.primary, width: 2),
+                                  foregroundColor: theme.colorScheme.primary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text(
+                                  'Ulangi',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: ElevatedButton.icon(
+                                onPressed: _isUploading ? null : _uploadImage,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.cloud_upload),
+                                label: const Text(
+                                  'Kirim Foto',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
                   ],
                 ),
               ),
