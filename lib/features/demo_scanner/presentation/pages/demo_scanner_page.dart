@@ -3,12 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
-import 'package:dio/dio.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../cubit/scanner_cubit.dart';
+import '../cubit/scanner_state.dart';
 import '../../../../core/utils/permission_helper.dart';
-import '../../data/datasources/scanner_remote_data_source.dart';
-import '../../data/repositories/scanner_repository_impl.dart';
-import '../../domain/usecases/submit_selfie_with_ktp_usecase.dart';
 
 // =========================================================================
 // KONFIGURASI UKURAN OVERLAY KAMERA
@@ -16,9 +16,9 @@ import '../../domain/usecases/submit_selfie_with_ktp_usecase.dart';
 // (Angka merupakan rasio persentase dari layar kamera, contoh: 0.55 = 55%)
 // =========================================================================
 const double kFaceOverlayWidthRatio = 0.55;
-const double kFaceOverlayHeightRatio = 0.30;
+const double kFaceOverlayHeightRatio = 0.35;
 const double kFaceOverlayCenterYRatio =
-    0.30; // Posisi vertikal Wajah (semakin kecil semakin ke atas)
+    0.35; // Posisi vertikal Wajah (semakin kecil semakin ke atas)
 
 const double kKtpOverlayWidthRatio = 0.50;
 const double kKtpOverlayHeightRatio = 0.15;
@@ -36,7 +36,6 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   CameraController? _cameraController;
   bool _isPermissionGranted = false;
   bool _isCameraInitialized = false;
-  bool _isUploading = false;
   CameraLensDirection _currentLensDirection = CameraLensDirection.back;
   String? _capturedImagePath;
 
@@ -47,8 +46,12 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
       enableTracking: false,
     ),
   );
+  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+
   bool _isFaceDetected = false;
+  bool _isKtpDetected = false;
   bool _isProcessingImage = false;
+  bool _isCapturing = false;
 
   final Map<DeviceOrientation, int> _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -57,18 +60,9 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
     DeviceOrientation.landscapeRight: 270,
   };
 
-  // Inisialisasi UseCase secara langsung (Untuk di-refactor ke Dependency Injection/BLoC nanti)
-  late final SubmitSelfieWithKtpUseCase _submitUseCase;
-
   @override
   void initState() {
     super.initState();
-    // Setup manual dependency untuk demo
-    final dio = Dio();
-    final remoteDataSource = ScannerRemoteDataSourceImpl(dio);
-    final repository = ScannerRepositoryImpl(remoteDataSource);
-    _submitUseCase = SubmitSelfieWithKtpUseCase(repository);
-
     _checkPermissionAndInitCamera();
   }
 
@@ -113,13 +107,14 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   }
 
   Future<void> _switchCamera() async {
-    if (_isUploading) return;
+    if (context.read<ScannerCubit>().state is ScannerLoading) return;
     setState(() {
       _currentLensDirection = _currentLensDirection == CameraLensDirection.back
           ? CameraLensDirection.front
           : CameraLensDirection.back;
       _isCameraInitialized = false;
       _isFaceDetected = false;
+      _isKtpDetected = false;
     });
 
     try {
@@ -131,25 +126,67 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
     await _checkPermissionAndInitCamera();
   }
 
+  bool _checkIfKtp(RecognizedText recognizedText) {
+    final text = recognizedText.text.toLowerCase();
+    return text.contains('nik') ||
+        text.contains('provinsi') ||
+        text.contains('kartu tanda') ||
+        text.contains('kewarganegaraan');
+  }
+
+  Future<void> _autoCapture() async {
+    if (_isCapturing || _capturedImagePath != null) return;
+    _isCapturing = true;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wajah dan KTP terdeteksi! Mengambil foto...'),
+          duration: Duration(milliseconds: 1000),
+        ),
+      );
+    }
+
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    if (mounted && _capturedImagePath == null) {
+      await _captureImage();
+    }
+    _isCapturing = false;
+  }
+
   void _startImageStream() {
     if (_cameraController == null || !_isCameraInitialized) return;
 
     _cameraController!.startImageStream((CameraImage image) async {
-      if (_isProcessingImage) return;
+      if (_isProcessingImage || _capturedImagePath != null || _isCapturing) return;
       _isProcessingImage = true;
 
       try {
         final inputImage = _inputImageFromCameraImage(image);
         if (inputImage != null) {
           final faces = await _faceDetector.processImage(inputImage);
+          final faceDetected = faces.isNotEmpty;
+
+          bool ktpDetected = false;
+          if (faceDetected) {
+            final recognizedText = await _textRecognizer.processImage(inputImage);
+            ktpDetected = _checkIfKtp(recognizedText);
+          }
+
           if (mounted) {
             setState(() {
-              _isFaceDetected = faces.isNotEmpty;
+              _isFaceDetected = faceDetected;
+              _isKtpDetected = ktpDetected;
             });
+
+            if (faceDetected && ktpDetected) {
+              _autoCapture();
+            }
           }
         }
       } catch (e) {
-        debugPrint('Error processing image for face detection: $e');
+        debugPrint('Error processing image for face and KTP detection: $e');
       } finally {
         _isProcessingImage = false;
       }
@@ -203,7 +240,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   }
 
   Future<void> _captureImage() async {
-    if (_isUploading) return;
+    if (context.read<ScannerCubit>().state is ScannerLoading) return;
 
     try {
       String imagePath = "simulated_path.jpg"; // Path fallback
@@ -236,48 +273,15 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
   void _retakeImage() {
     setState(() {
       _capturedImagePath = null;
+      _isFaceDetected = false;
+      _isKtpDetected = false;
     });
     _startImageStream();
   }
 
-  Future<void> _uploadImage() async {
-    if (_isUploading || _capturedImagePath == null) return;
-
-    setState(() {
-      _isUploading = true;
-    });
-
-    try {
-      // Panggil API (Akan mengembalikan Dummy Response sesuai setup)
-      final result = await _submitUseCase(_capturedImagePath!);
-
-      if (!mounted) return;
-
-      result.fold(
-        (failure) {
-          setState(() {
-            _isUploading = false;
-          });
-          _showResultDialog('Error', failure.message);
-        },
-        (entity) {
-          setState(() {
-            _isUploading = false;
-            _capturedImagePath = null; // Reset pratinjau setelah berhasil
-          });
-          _showResultDialog(
-            'SUKSES!',
-            'Status: ${entity.status}\nNama: ${entity.nama}\nNIK: ${entity.nik}\nSkor Liveness: ${entity.livenessScore}%',
-          );
-        },
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isUploading = false;
-      });
-      _showResultDialog('Error', 'Terjadi kesalahan sistem.');
-    }
+  void _uploadImage() {
+    if (_capturedImagePath == null) return;
+    context.read<ScannerCubit>().uploadSelfieWithKtp(_capturedImagePath!);
   }
 
   Widget _buildCapturedPreview() {
@@ -341,6 +345,7 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
     } catch (_) {}
     _cameraController?.dispose();
     _faceDetector.close();
+    _textRecognizer.close();
     super.dispose();
   }
 
@@ -351,252 +356,319 @@ class _DemoScannerPageState extends State<DemoScannerPage> {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      body: Container(
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.primary.withAlpha(26), // soft primary tint
-              theme.colorScheme.surface,
-              theme.colorScheme.secondary.withAlpha(13), // soft secondary tint
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  SizedBox(width: 15),
-                  IconButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    icon: Icon(Icons.arrow_back_rounded),
-                  ),
-                  SizedBox(width: MediaQuery.of(context).size.width * 0.15),
-                  Text(
-                    "Demo Scanner",
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Spacer(),
-                  IconButton(
-                    onPressed: _capturedImagePath != null || _isUploading ? null : _switchCamera,
-                    icon: Icon(
-                      Icons.flip_camera_android,
-                      color: _capturedImagePath != null || _isUploading ? Colors.grey : null,
-                    ),
-                  ),
-                  SizedBox(width: 15),
+      body: BlocConsumer<ScannerCubit, ScannerState>(
+        listener: (context, state) {
+          if (state is ScannerSuccess) {
+            final entity = state.verificationResult;
+            setState(() {
+              _capturedImagePath = null;
+            });
+            _showResultDialog(
+              'SUKSES!',
+              'Status: ${entity.status}\nNama: ${entity.nama}\nNIK: ${entity.nik}\nSkor Liveness: ${entity.livenessScore}%',
+            );
+          } else if (state is ScannerFailure) {
+            _showResultDialog('Error', state.errorMessage);
+          }
+        },
+        builder: (context, state) {
+          final isUploading = state is ScannerLoading;
+
+          return Container(
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.primary.withAlpha(26), // soft primary tint
+                  theme.colorScheme.surface,
+                  theme.colorScheme.secondary.withAlpha(13), // soft secondary tint
                 ],
               ),
-              // Petunjuk
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12.0),
-                child: Text(
-                  'Posisikan Wajah dan KTP Anda pada bingkai',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-
-              // Area Kamera
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: AspectRatio(
-                      aspectRatio: 9 / 16,
-                      // aspectRatio: 3 / 4,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white24, width: 1),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(width: 15),
+                      IconButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        icon: Icon(Icons.arrow_back_rounded),
+                      ),
+                      SizedBox(width: MediaQuery.of(context).size.width * 0.15),
+                      Text(
+                        "Demo Scanner",
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Pratinjau Kamera / Foto Hasil
-                            _capturedImagePath != null
-                                ? _buildCapturedPreview()
-                                : (_isCameraInitialized && _cameraController != null
-                                    ? CameraPreview(_cameraController!)
-                                    : _buildMockCameraPreview()),
+                      ),
+                      Spacer(),
+                      IconButton(
+                        onPressed: _capturedImagePath != null || isUploading ? null : _switchCamera,
+                        icon: Icon(
+                          Icons.flip_camera_android,
+                          color: _capturedImagePath != null || isUploading ? Colors.grey : null,
+                        ),
+                      ),
+                      SizedBox(width: 15),
+                    ],
+                  ),
+                  // Petunjuk
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(
+                      'Posisikan Wajah dan KTP Anda pada bingkai',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
 
-                            // Overlay Selfie + KTP 1 Frame (Hanya tampil saat mode kamera)
-                            if (_capturedImagePath == null)
-                              CustomPaint(
-                                size: Size.infinite,
-                                painter: SelfieKtpOverlayPainter(),
-                              ),
+                  // Area Kamera
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: AspectRatio(
+                          aspectRatio: 9 / 16,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: Colors.white24, width: 1),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Pratinjau Kamera / Foto Hasil
+                                _capturedImagePath != null
+                                    ? _buildCapturedPreview()
+                                    : (_isCameraInitialized && _cameraController != null
+                                        ? CameraPreview(_cameraController!)
+                                        : _buildMockCameraPreview()),
 
-                            // Notifikasi Deteksi Wajah (Hanya tampil saat mode kamera)
-                            if (_isCameraInitialized && _capturedImagePath == null)
-                              Positioned(
-                                top: 16,
-                                left: 16,
-                                right: 16,
-                                child: Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _isFaceDetected
-                                          ? Colors.green.withAlpha(204)
-                                          : Colors.red.withAlpha(204),
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    child: Row(
+                                // Overlay Selfie + KTP 1 Frame (Hanya tampil saat mode kamera)
+                                if (_capturedImagePath == null)
+                                  CustomPaint(
+                                    size: Size.infinite,
+                                    painter: SelfieKtpOverlayPainter(),
+                                  ),
+
+                                // Notifikasi Deteksi Wajah & KTP (Hanya tampil saat mode kamera)
+                                if (_isCameraInitialized && _capturedImagePath == null)
+                                  Positioned(
+                                    top: 16,
+                                    left: 16,
+                                    right: 16,
+                                    child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
-                                          _isFaceDetected
-                                              ? Icons.check_circle
-                                              : Icons.warning,
-                                          color: Colors.white,
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _isFaceDetected
-                                              ? 'Wajah Terdeteksi'
-                                              : 'Wajah Tidak Terdeteksi',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
                                           ),
+                                          decoration: BoxDecoration(
+                                            color: (_isFaceDetected && _isKtpDetected)
+                                                ? Colors.green.withAlpha(204)
+                                                : Colors.orange.withAlpha(204),
+                                            borderRadius: BorderRadius.circular(30),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                (_isFaceDetected && _isKtpDetected)
+                                                    ? Icons.check_circle
+                                                    : Icons.info_outline,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                (_isFaceDetected && _isKtpDetected)
+                                                    ? 'Siap! Mengambil gambar...'
+                                                    : 'Posisikan Wajah & KTP Anda',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            _buildStatusBadge(
+                                              label: 'Wajah',
+                                              isDetected: _isFaceDetected,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _buildStatusBadge(
+                                              label: 'KTP',
+                                              isDetected: _isKtpDetected,
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
                                   ),
-                                ),
-                              ),
 
-                            // Loading Indicator saat upload
-                            if (_isUploading)
-                              Container(
-                                color: Colors.black54,
-                                child: const Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircularProgressIndicator(
-                                        color: Colors.white,
+                                // Loading Indicator saat upload
+                                if (isUploading)
+                                  Container(
+                                    color: Colors.black54,
+                                    child: const Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircularProgressIndicator(
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(height: 16),
+                                          Text(
+                                            'Mengunggah Gambar...',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      SizedBox(height: 16),
-                                      Text(
-                                        'Mengunggah Gambar...',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ),
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              // Panel Hasil & Tombol Eksekusi
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    if (_capturedImagePath == null)
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton.icon(
-                          onPressed: _isUploading ? null : _captureImage,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text(
-                            'Ambil Foto',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 56,
-                              child: OutlinedButton.icon(
-                                onPressed: _isUploading ? null : _retakeImage,
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: theme.colorScheme.primary, width: 2),
-                                  foregroundColor: theme.colorScheme.primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.refresh),
-                                label: const Text(
-                                  'Ulangi',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: SizedBox(
-                              height: 56,
-                              child: ElevatedButton.icon(
-                                onPressed: _isUploading ? null : _uploadImage,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.primary,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.cloud_upload),
-                                label: const Text(
-                                  'Kirim Foto',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                  // Panel Hasil & Tombol Eksekusi
+                  Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        if (_capturedImagePath == null)
+                          // SizedBox(
+                          //   width: double.infinity,
+                          //   height: 56,
+                          //   child: ElevatedButton.icon(
+                          //     onPressed: isUploading ? null : _captureImage,
+                          //     style: ElevatedButton.styleFrom(
+                          //       backgroundColor: theme.colorScheme.primary,
+                          //       foregroundColor: Colors.white,
+                          //       shape: RoundedRectangleBorder(
+                          //         borderRadius: BorderRadius.circular(16),
+                          //       ),
+                          //     ),
+                          //     icon: const Icon(Icons.camera_alt),
+                          //     label: const Text(
+                          //       'Ambil Foto',
+                          //       style: TextStyle(
+                          //         fontSize: 16,
+                          //         fontWeight: FontWeight.bold,
+                          //       ),
+                          //     ),
+                          //   ),
+                          // )
+                          SizedBox()
+                        else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: OutlinedButton.icon(
+                                    onPressed: isUploading ? null : _retakeImage,
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(color: theme.colorScheme.primary, width: 2),
+                                      foregroundColor: theme.colorScheme.primary,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text(
+                                      'Ulangi',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: ElevatedButton.icon(
+                                    onPressed: isUploading ? null : _uploadImage,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: theme.colorScheme.primary,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.cloud_upload),
+                                    label: const Text(
+                                      'Kirim Foto',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                  ],
-                ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge({required String label, required bool isDetected}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDetected ? Colors.green.withAlpha(204) : Colors.red.withAlpha(204),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isDetected ? Icons.check : Icons.close,
+            color: Colors.white,
+            size: 12,
           ),
-        ),
+          const SizedBox(width: 4),
+          Text(
+            '$label: ${isDetected ? 'OK' : 'Belum'}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
