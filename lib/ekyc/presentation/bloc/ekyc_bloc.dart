@@ -76,6 +76,8 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
         ktpFile: ktpCompressed,
         ktpFaceFile: faceCompressed,
         selfieFile: selfieCompressed,
+        nik: currentState.nik,
+        name: currentState.name,
       );
 
       result.fold(

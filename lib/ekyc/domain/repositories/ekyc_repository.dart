@@ -8,5 +8,7 @@ abstract class EkycRepository {
     required File ktpFile,
     required File ktpFaceFile,
     required File selfieFile,
+    required String nik,
+    required String name,
   });
 }

@@ -13,11 +13,15 @@ class VerifyEkycUseCase {
     required File ktpFile,
     required File ktpFaceFile,
     required File selfieFile,
+    required String nik,
+    required String name,
   }) async {
     return await repository.verifyEkyc(
       ktpFile: ktpFile,
       ktpFaceFile: ktpFaceFile,
       selfieFile: selfieFile,
+      nik: nik,
+      name: name,
     );
   }
 }
