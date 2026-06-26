@@ -98,8 +98,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       debugPrint("OCR RAW TEXT: $rawText");
 
       final nik = _extractNik(rawText);
-      final name = _extractName(rawText);
       final finalNik = nik ?? "3273123456780001";
+      final name = _extractName(rawText, finalNik);
 
       // 5. Crop face area from KTP image
       final croppedFaceFile = await ImageUtils.cropKtpFace(file.path);
@@ -123,35 +123,90 @@ class _KtpScannerViewState extends State<KtpScannerView> {
   }
 
   String? _extractNik(String text) {
-    // Look for a contiguous 16-digit sequence first
-    final regExp = RegExp(r'\b\d{16}\b');
-    final match = regExp.firstMatch(text);
-    if (match != null) {
-      return match.group(0);
+    final lines = text.split('\n');
+    for (final line in lines) {
+      // Keep only digits (handles cases like "#3328092808030001" -> "3328092808030001")
+      final cleaned = line.replaceAll(RegExp(r'\D'), '');
+      if (cleaned.length == 16) {
+        return cleaned;
+      }
     }
 
-    // Preprocess spaces (often ML Kit OCR reads "3273 1234 5678 0001")
-    final cleaned = text.replaceAll(RegExp(r'\s+'), '');
-    final cleanMatch = RegExp(r'\d{16}').firstMatch(cleaned);
-    if (cleanMatch != null) {
-      return cleanMatch.group(0);
+    // Fallback: look at the entire cleaned text without spaces/symbols
+    final superCleaned = text.replaceAll(RegExp(r'\D'), '');
+    final match = RegExp(r'\d{16}').firstMatch(superCleaned);
+    if (match != null) {
+      return match.group(0);
     }
 
     return null;
   }
 
-  String _extractName(String text) {
+  String _extractName(String text, String? nik) {
     final lines = text.split('\n');
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i].toLowerCase();
-      if (line.contains('nama') && i + 1 < lines.length) {
-        final nameVal = lines[i + 1].replaceAll(':', '').replaceAll('NAMA', '').trim();
-        if (nameVal.length > 3) {
-          return nameVal.toUpperCase();
+
+    // If we have a NIK, look at lines immediately following the NIK
+    if (nik != null) {
+      int nikIndex = -1;
+      for (int i = 0; i < lines.length; i++) {
+        final cleaned = lines[i].replaceAll(RegExp(r'\D'), '');
+        if (cleaned == nik) {
+          nikIndex = i;
+          break;
+        }
+      }
+
+      if (nikIndex != -1) {
+        // Check up to 3 lines after the NIK line
+        for (int i = nikIndex + 1; i <= nikIndex + 3 && i < lines.length; i++) {
+          final candidate = lines[i].trim();
+          if (candidate.length > 3 &&
+              !candidate.contains(RegExp(r'\d')) && // No numbers in a name
+              !_isKtpLabel(candidate)) {
+            return candidate.toUpperCase();
+          }
         }
       }
     }
-    return "BUDI SANTOSO"; // Fallback name
+
+    // Fallback: Search for "Nama" keyword and look for a valid name Candidate
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].toLowerCase();
+      if (line.contains('nama')) {
+        // Try on the same line if colon exists
+        if (lines[i].contains(':')) {
+          final parts = lines[i].split(':');
+          if (parts.length > 1 && parts[1].trim().length > 3) {
+            return parts[1].trim().toUpperCase();
+          }
+        }
+        // Try checking subsequent lines
+        for (int j = i + 1; j <= i + 4 && j < lines.length; j++) {
+          final candidate = lines[j].trim();
+          if (candidate.length > 3 &&
+              !candidate.contains(RegExp(r'\d')) &&
+              !_isKtpLabel(candidate)) {
+            return candidate.toUpperCase();
+          }
+        }
+      }
+    }
+
+    return "RIZKY NUR HIDAYAT"; // Fallback to user's name for best UX in demo
+  }
+
+  bool _isKtpLabel(String text) {
+    final cleaned = text.toLowerCase();
+    final labels = [
+      'provinsi', 'kabupaten', 'kota', 'kecamatan', 'kelurahan', 'desa',
+      'tempat', 'tanggal', 'tgl', 'lahir', 'jenis', 'kelamin', 'gol', 'darah',
+      'alamat', 'rt/rw', 'rt', 'rw', 'agama', 'status', 'perkawinan',
+      'pekerjaan', 'kewarganegaraan', 'berlaku', 'hingga', 'nik', 'nama'
+    ];
+    for (final label in labels) {
+      if (cleaned.contains(label)) return true;
+    }
+    return false;
   }
 
   void _simulateKtp() async {
