@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../demo_scanner/presentation/pages/demo_scanner_page.dart';
 import '../../../chat/presentation/pages/chat_page.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../demo_scanner/presentation/cubit/scanner_cubit.dart';
 import '../../../../injection_container.dart';
+import '../../../../ekyc/presentation/pages/ekyc_page.dart';
+import '../../../../ekyc/presentation/bloc/ekyc_bloc.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -129,8 +129,8 @@ class HomePage extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => BlocProvider(
-                          create: (context) => sl<ScannerCubit>(),
-                          child: const DemoScannerPage(),
+                          create: (context) => sl<EkycBloc>(),
+                          child: const EkycPage(),
                         ),
                       ),
                     );

@@ -5,6 +5,11 @@ import 'features/demo_scanner/data/repositories/scanner_repository_impl.dart';
 import 'features/demo_scanner/domain/repositories/scanner_repository.dart';
 import 'features/demo_scanner/domain/usecases/submit_selfie_with_ktp_usecase.dart';
 import 'features/demo_scanner/presentation/cubit/scanner_cubit.dart';
+import 'ekyc/data/datasources/ekyc_remote_data_source.dart';
+import 'ekyc/data/repositories/ekyc_repository_impl.dart';
+import 'ekyc/domain/repositories/ekyc_repository.dart';
+import 'ekyc/domain/usecases/verify_ekyc_usecase.dart';
+import 'ekyc/presentation/bloc/ekyc_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -28,4 +33,23 @@ Future<void> initDependencies() async {
 
   // Cubit / Bloc
   sl.registerFactory(() => ScannerCubit(submitUseCase: sl()));
+
+  // =========================================================================
+  // E-KYC Feature Registration
+  // =========================================================================
+  // Data Source
+  sl.registerLazySingleton<EkycRemoteDataSource>(
+    () => EkycRemoteDataSourceImpl(sl()),
+  );
+
+  // Repository
+  sl.registerLazySingleton<EkycRepository>(
+    () => EkycRepositoryImpl(sl()),
+  );
+
+  // Use Cases
+  sl.registerLazySingleton(() => VerifyEkycUseCase(sl()));
+
+  // Bloc
+  sl.registerFactory(() => EkycBloc(verifyEkycUseCase: sl()));
 }
