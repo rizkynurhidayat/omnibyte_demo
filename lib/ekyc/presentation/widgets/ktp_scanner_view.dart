@@ -19,6 +19,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
   bool _isCameraInitialized = false;
   bool _isProcessing = false;
   final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  CameraLensDirection _lensDirection = CameraLensDirection.back;
 
   @override
   void initState() {
@@ -34,13 +35,13 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       try {
         final cameras = await availableCameras();
         if (cameras.isNotEmpty) {
-          final backCamera = cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
+          final targetCamera = cameras.firstWhere(
+            (c) => c.lensDirection == _lensDirection,
             orElse: () => cameras.first,
           );
 
           _cameraController = CameraController(
-            backCamera,
+            targetCamera,
             ResolutionPreset.high,
             enableAudio: false,
           );
@@ -56,9 +57,22 @@ class _KtpScannerViewState extends State<KtpScannerView> {
           }
         }
       } catch (e) {
-        debugPrint('Error initializing back camera: $e');
+        debugPrint('Error initializing camera: $e');
       }
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameraController == null || !_isCameraInitialized) return;
+    setState(() {
+      _lensDirection = _lensDirection == CameraLensDirection.back
+          ? CameraLensDirection.front
+          : CameraLensDirection.back;
+      _isCameraInitialized = false;
+    });
+    await _cameraController?.dispose();
+    _cameraController = null;
+    await _initCamera();
   }
 
   Future<void> _captureKtp() async {
@@ -274,6 +288,19 @@ class _KtpScannerViewState extends State<KtpScannerView> {
           ),
         ),
 
+        // Floating Camera Switch Button
+        Positioned(
+          top: 15,
+          right: 15,
+          child: CircleAvatar(
+            backgroundColor: Colors.black54,
+            child: IconButton(
+              icon: const Icon(Icons.flip_camera_android, color: Colors.white),
+              onPressed: _switchCamera,
+            ),
+          ),
+        ),
+
         // Guidance HUD
         Positioned(
           top: 40,
@@ -368,7 +395,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                       ),
                       child: Icon(
                         Icons.camera_alt,
-                        color: Colors.blue[900],
+                        color: Theme.of(context).colorScheme.primary,
                         size: 32,
                       ),
                     ),
@@ -379,7 +406,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                 TextButton.icon(
                   onPressed: _simulateKtp,
                   style: TextButton.styleFrom(
-                    backgroundColor: Colors.blue[900]?.withAlpha(200),
+                    backgroundColor: Theme.of(context).colorScheme.primary.withAlpha(200),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     shape: RoundedRectangleBorder(

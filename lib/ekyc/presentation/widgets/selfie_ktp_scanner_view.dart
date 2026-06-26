@@ -24,6 +24,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
   bool _isCameraInitialized = false;
   bool _isProcessingImage = false;
   bool _isCapturing = false;
+  CameraLensDirection _lensDirection = CameraLensDirection.front;
 
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -57,13 +58,13 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
       try {
         final cameras = await availableCameras();
         if (cameras.isNotEmpty) {
-          final frontCamera = cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.front,
+          final targetCamera = cameras.firstWhere(
+            (c) => c.lensDirection == _lensDirection,
             orElse: () => cameras.first,
           );
 
           _cameraController = CameraController(
-            frontCamera,
+            targetCamera,
             ResolutionPreset.high,
             enableAudio: false,
             imageFormatGroup: Platform.isAndroid
@@ -82,9 +83,28 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
           }
         }
       } catch (e) {
-        debugPrint('Error initializing front camera: $e');
+        debugPrint('Error initializing camera: $e');
       }
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameraController == null || !_isCameraInitialized) return;
+    
+    try {
+      await _cameraController?.stopImageStream();
+    } catch (_) {}
+
+    setState(() {
+      _lensDirection = _lensDirection == CameraLensDirection.back
+          ? CameraLensDirection.front
+          : CameraLensDirection.back;
+      _isCameraInitialized = false;
+    });
+    
+    await _cameraController?.dispose();
+    _cameraController = null;
+    await _initCamera();
   }
 
   void _startImageStream() {
@@ -236,15 +256,17 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         else
           Container(
             color: Colors.black,
-            child: const Center(
+            child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 16),
                   Text(
-                    'Menyiapkan Kamera Depan...',
-                    style: TextStyle(color: Colors.white70),
+                    _lensDirection == CameraLensDirection.front
+                        ? 'Menyiapkan Kamera Depan...'
+                        : 'Menyiapkan Kamera Belakang...',
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
@@ -255,6 +277,19 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         Positioned.fill(
           child: CustomPaint(
             painter: SelfieKtpCutoutPainter(),
+          ),
+        ),
+
+        // Floating Camera Switch Button
+        Positioned(
+          top: 15,
+          right: 15,
+          child: CircleAvatar(
+            backgroundColor: Colors.black54,
+            child: IconButton(
+              icon: const Icon(Icons.flip_camera_android, color: Colors.white),
+              onPressed: _switchCamera,
+            ),
           ),
         ),
 
@@ -340,8 +375,8 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                         ],
                       ),
                       child: Icon(
-                        Icons.camera_front,
-                        color: Colors.blue[900],
+                        _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
+                        color: Theme.of(context).colorScheme.primary,
                         size: 32,
                       ),
                     ),
@@ -351,7 +386,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                 TextButton.icon(
                   onPressed: _simulateSelfie,
                   style: TextButton.styleFrom(
-                    backgroundColor: Colors.blue[900]?.withAlpha(200),
+                    backgroundColor: Theme.of(context).colorScheme.primary.withAlpha(200),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     shape: RoundedRectangleBorder(

@@ -58,8 +58,7 @@ class _EkycPageState extends State<EkycPage> {
           'Pendaftaran e-KYC',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 0.5,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -181,10 +180,10 @@ class _EkycPageState extends State<EkycPage> {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: isDone ? Colors.blue[900] : Colors.grey[300],
+              color: isDone ? Theme.of(context).colorScheme.primary : Colors.grey[300],
               shape: BoxShape.circle,
               border: isActive
-                  ? Border.all(color: Colors.blueAccent, width: 2.5)
+                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2.5)
                   : null,
             ),
             child: Center(
@@ -206,7 +205,7 @@ class _EkycPageState extends State<EkycPage> {
             style: TextStyle(
               fontSize: 10,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              color: isActive ? Colors.blue[900] : Colors.grey[600],
+              color: isActive ? Theme.of(context).colorScheme.primary : Colors.grey[600],
             ),
           ),
         ],
@@ -218,7 +217,7 @@ class _EkycPageState extends State<EkycPage> {
     return Container(
       width: 40,
       height: 2,
-      color: isDone ? Colors.blue[900] : Colors.grey[300],
+      color: isDone ? Theme.of(context).colorScheme.primary : Colors.grey[300],
     );
   }
 
@@ -352,6 +351,8 @@ class _EkycPageState extends State<EkycPage> {
               Expanded(
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    side: BorderSide(color: Theme.of(context).colorScheme.primary.withAlpha(100)),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -365,7 +366,7 @@ class _EkycPageState extends State<EkycPage> {
               Expanded(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -455,6 +456,8 @@ class _EkycPageState extends State<EkycPage> {
               Expanded(
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    side: BorderSide(color: Theme.of(context).colorScheme.primary.withAlpha(100)),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -474,7 +477,7 @@ class _EkycPageState extends State<EkycPage> {
               Expanded(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -494,6 +497,7 @@ class _EkycPageState extends State<EkycPage> {
 
   Widget _buildSuccessScreen(BuildContext context, EkycSuccessState state) {
     final result = state.verificationResult;
+    final isSuccess = result.status == 'success';
 
     return Center(
       child: SingleChildScrollView(
@@ -507,15 +511,15 @@ class _EkycPageState extends State<EkycPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.green,
+                Icon(
+                  isSuccess ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  color: isSuccess ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.error,
                   size: 72,
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Verifikasi Berhasil!',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                Text(
+                  isSuccess ? 'Verifikasi Berhasil!' : 'Verifikasi Gagal',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -537,25 +541,68 @@ class _EkycPageState extends State<EkycPage> {
                 const Divider(),
                 const SizedBox(height: 16),
 
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[900],
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                if (isSuccess)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        // Navigate back to Home
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      },
+                      child: const Text(
+                        'Kembali ke Home',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
                     ),
-                    onPressed: () {
-                      // Navigate back to Home
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    },
-                    child: const Text(
-                      'Kembali ke Home',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
+                  )
+                else
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            context.read<EkycBloc>().add(ResetEkyc());
+                          },
+                          child: const Text(
+                            'Ulangi Verifikasi',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                            foregroundColor: Theme.of(context).colorScheme.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                          },
+                          child: const Text(
+                            'Kembali ke Home',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
               ],
             ),
           ),
