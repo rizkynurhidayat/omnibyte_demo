@@ -111,9 +111,9 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       final rawText = recognizedText.text;
       debugPrint("OCR RAW TEXT: $rawText");
 
-      final nik = _extractNik(rawText);
+      final nik = _extractNik(recognizedText);
       final finalNik = nik ?? "3273123456780001";
-      final name = _extractName(rawText, finalNik);
+      final name = _extractName(recognizedText, finalNik);
 
       // 5. Crop face area from KTP image
       final croppedFaceFile = await ImageUtils.cropKtpFace(file.path);
@@ -136,18 +136,42 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     }
   }
 
-  String? _extractNik(String text) {
-    final lines = text.split('\n');
+  String? _extractNik(RecognizedText recognizedText) {
+    // 1. Loop through blocks and lines to perform character corrections for NIK
+    for (final block in recognizedText.blocks) {
+      for (final line in block.lines) {
+        final text = line.text;
+        
+        // Match the reference repo OCR correction logic:
+        final corrected = text
+            .replaceAll(RegExp(r'[oO]'), '0')
+            .replaceAll(RegExp(r'[lIiI]'), '1')
+            .replaceAll('b', '6')
+            .replaceAll('B', '8')
+            .replaceAll('?', '7')
+            .replaceAll('s', '5')
+            .replaceAll('S', '5')
+            .replaceAll(' ', '')
+            .replaceAll(RegExp(r'\D'), ''); // Keep only digits
+
+        if (corrected.length == 16) {
+          return corrected;
+        }
+      }
+    }
+
+    // 2. Fallback: Split raw text by newline and check
+    final rawText = recognizedText.text;
+    final lines = rawText.split('\n');
     for (final line in lines) {
-      // Keep only digits (handles cases like "#3328092808030001" -> "3328092808030001")
       final cleaned = line.replaceAll(RegExp(r'\D'), '');
       if (cleaned.length == 16) {
         return cleaned;
       }
     }
 
-    // Fallback: look at the entire cleaned text without spaces/symbols
-    final superCleaned = text.replaceAll(RegExp(r'\D'), '');
+    // 3. Secondary Fallback: look at the entire cleaned text without spaces/symbols
+    final superCleaned = rawText.replaceAll(RegExp(r'\D'), '');
     final match = RegExp(r'\d{16}').firstMatch(superCleaned);
     if (match != null) {
       return match.group(0);
@@ -156,10 +180,104 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     return null;
   }
 
-  String _extractName(String text, String? nik) {
-    final lines = text.split('\n');
+  String _extractName(RecognizedText recognizedText, String? nik) {
+    final rawText = recognizedText.text;
+    final lines = rawText.split('\n');
 
-    // If we have a NIK, look at lines immediately following the NIK
+    // 1. Same-line extraction: Check if any line contains a variation of "nama" and a colon
+    for (final block in recognizedText.blocks) {
+      for (final line in block.lines) {
+        final lineText = line.text.toLowerCase();
+        if (lineText.contains('nama') || lineText.contains('nema') || lineText.contains('name')) {
+          if (line.text.contains(':')) {
+            final parts = line.text.split(':');
+            if (parts.length > 1) {
+              final candidate = parts[1].replaceAll(RegExp(r'^[\s\-:=]+'), '').trim();
+              if (candidate.length > 3 && !candidate.contains(RegExp(r'\d')) && !_isKtpLabel(candidate)) {
+                return _fixAsciiCharacters(candidate).toUpperCase();
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Geometric alignment extraction: Match to the right of "Nama" label bounding box
+    Rect? namaLabelRect;
+    
+    // Find "Nama" (or similar typo) element's bounding box
+    for (final block in recognizedText.blocks) {
+      for (final line in block.lines) {
+        for (final element in line.elements) {
+          final elementText = element.text.toLowerCase().trim();
+          if (elementText == 'nama' || elementText == 'nema' || elementText == 'name') {
+            namaLabelRect = element.boundingBox;
+            break;
+          }
+        }
+        if (namaLabelRect != null) break;
+      }
+      if (namaLabelRect != null) break;
+    }
+
+    // If still null, search on line-level bounding box
+    if (namaLabelRect == null) {
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          final lineText = line.text.toLowerCase().trim();
+          if (lineText.startsWith('nama') || lineText.startsWith('nema') || lineText.startsWith('name')) {
+            namaLabelRect = line.boundingBox;
+            break;
+          }
+        }
+        if (namaLabelRect != null) break;
+      }
+    }
+
+    // If label bounding box is found, look for candidate lines horizontally aligned to the right of it
+    if (namaLabelRect != null) {
+      TextLine? bestNameLine;
+      double minDistance = double.maxFinite;
+
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          final lineText = line.text.trim();
+          final lineRect = line.boundingBox;
+
+          // Check if line is to the right of the label and vertically aligned
+          final centerYDiff = (lineRect.center.dy - namaLabelRect.center.dy).abs();
+          // Vertically aligned if vertical distance is within 1.5x label height
+          final isVerticallyAligned = centerYDiff <= (namaLabelRect.height * 1.5);
+          final isToTheRight = lineRect.center.dx > namaLabelRect.right;
+
+          if (isVerticallyAligned && isToTheRight) {
+            // Must not contain numbers, must be longer than 3 characters, and not be a label itself
+            if (lineText.length > 3 &&
+                !lineText.contains(RegExp(r'\d')) &&
+                !_isKtpLabel(lineText)) {
+              
+              // We prefer the line closest to the label horizontally
+              final distance = lineRect.left - namaLabelRect.right;
+              if (distance < minDistance) {
+                minDistance = distance;
+                bestNameLine = line;
+              }
+            }
+          }
+        }
+      }
+
+      if (bestNameLine != null) {
+        final rawName = bestNameLine.text;
+        final cleanedName = rawName.replaceAll(RegExp(r'^[\s\-:=]+'), '').trim();
+        final fixed = _fixAsciiCharacters(cleanedName);
+        if (fixed.length > 3) {
+          return fixed.toUpperCase();
+        }
+      }
+    }
+
+    // 3. Fallback: Search for lines immediately after the detected NIK line
     if (nik != null) {
       int nikIndex = -1;
       for (int i = 0; i < lines.length; i++) {
@@ -171,42 +289,33 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       }
 
       if (nikIndex != -1) {
-        // Check up to 3 lines after the NIK line
         for (int i = nikIndex + 1; i <= nikIndex + 3 && i < lines.length; i++) {
           final candidate = lines[i].trim();
           if (candidate.length > 3 &&
-              !candidate.contains(RegExp(r'\d')) && // No numbers in a name
+              !candidate.contains(RegExp(r'\d')) &&
               !_isKtpLabel(candidate)) {
-            return candidate.toUpperCase();
+            return _fixAsciiCharacters(candidate).toUpperCase();
           }
         }
       }
     }
 
-    // Fallback: Search for "Nama" keyword and look for a valid name Candidate
+    // 4. Fallback: Keyword-based line traversal
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].toLowerCase();
       if (line.contains('nama')) {
-        // Try on the same line if colon exists
-        if (lines[i].contains(':')) {
-          final parts = lines[i].split(':');
-          if (parts.length > 1 && parts[1].trim().length > 3) {
-            return parts[1].trim().toUpperCase();
-          }
-        }
-        // Try checking subsequent lines
         for (int j = i + 1; j <= i + 4 && j < lines.length; j++) {
           final candidate = lines[j].trim();
           if (candidate.length > 3 &&
               !candidate.contains(RegExp(r'\d')) &&
               !_isKtpLabel(candidate)) {
-            return candidate.toUpperCase();
+            return _fixAsciiCharacters(candidate).toUpperCase();
           }
         }
       }
     }
 
-    return "RIZKY NUR HIDAYAT"; // Fallback to user's name for best UX in demo
+    return "RIZKY NUR HIDAYAT"; // Fallback for best UX in demo
   }
 
   bool _isKtpLabel(String text) {
@@ -221,6 +330,20 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       if (cleaned.contains(label)) return true;
     }
     return false;
+  }
+
+  String _fixAsciiCharacters(String text) {
+    return text
+        .replaceAll('Ä', 'A')
+        .replaceAll('Ü', 'U')
+        .replaceAll('ü', 'u')
+        .replaceAll('Ö', 'O')
+        .replaceAll('ö', 'o')
+        .replaceAll('Ñ', 'N')
+        .replaceAll('Ë', 'E')
+        .replaceAll('ë', 'e')
+        .replaceAll('ÿ', 'y')
+        .replaceAll('ï', 'i');
   }
 
   void _simulateKtp() async {
