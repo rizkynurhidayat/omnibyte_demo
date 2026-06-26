@@ -27,13 +27,13 @@ class KtpCaptured extends EkycEvent {
   List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
 }
 
-class StartLivenessScan extends EkycEvent {
+class StartSelfieKtpScan extends EkycEvent {
   final String ktpPath;
   final String croppedFacePath;
   final String nik;
   final String name;
 
-  const StartLivenessScan({
+  const StartSelfieKtpScan({
     required this.ktpPath,
     required this.croppedFacePath,
     required this.nik,
@@ -44,10 +44,10 @@ class StartLivenessScan extends EkycEvent {
   List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
 }
 
-class LivenessCaptured extends EkycEvent {
+class SelfieKtpCaptured extends EkycEvent {
   final String selfiePath;
 
-  const LivenessCaptured({required this.selfiePath});
+  const SelfieKtpCaptured({required this.selfiePath});
 
   @override
   List<Object?> get props => [selfiePath];

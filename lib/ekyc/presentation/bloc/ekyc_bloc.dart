@@ -10,9 +10,9 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
   EkycBloc({required this.verifyEkycUseCase}) : super(EkycInitial()) {
     on<ResetEkyc>(_onResetEkyc);
     on<KtpCaptured>(_onKtpCaptured);
-    on<StartLivenessScan>(_onStartLivenessScan);
+    on<StartSelfieKtpScan>(_onStartSelfieKtpScan);
     on<RestoreState>(_onRestoreState);
-    on<LivenessCaptured>(_onLivenessCaptured);
+    on<SelfieKtpCaptured>(_onSelfieKtpCaptured);
     on<SubmitVerification>(_onSubmitVerification);
     on<SetFailure>(_onSetFailure);
   }
@@ -34,8 +34,8 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     ));
   }
 
-  void _onStartLivenessScan(StartLivenessScan event, Emitter<EkycState> emit) {
-    emit(EkycStepLivenessActive(
+  void _onStartSelfieKtpScan(StartSelfieKtpScan event, Emitter<EkycState> emit) {
+    emit(EkycStepSelfieKtpActive(
       ktpPath: event.ktpPath,
       croppedFacePath: event.croppedFacePath,
       nik: event.nik,
@@ -43,10 +43,10 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     ));
   }
 
-  void _onLivenessCaptured(LivenessCaptured event, Emitter<EkycState> emit) {
+  void _onSelfieKtpCaptured(SelfieKtpCaptured event, Emitter<EkycState> emit) {
     final currentState = state;
-    if (currentState is EkycStepLivenessActive) {
-      emit(EkycStepLivenessCompleted(
+    if (currentState is EkycStepSelfieKtpActive) {
+      emit(EkycStepSelfieKtpCompleted(
         ktpPath: currentState.ktpPath,
         croppedFacePath: currentState.croppedFacePath,
         nik: currentState.nik,
@@ -61,7 +61,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     Emitter<EkycState> emit,
   ) async {
     final currentState = state;
-    if (currentState is! EkycStepLivenessCompleted) return;
+    if (currentState is! EkycStepSelfieKtpCompleted) return;
 
     emit(const EkycSubmittingState());
 

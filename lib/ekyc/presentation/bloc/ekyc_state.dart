@@ -29,13 +29,13 @@ class EkycStepKtpCompleted extends EkycState {
   List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
 }
 
-class EkycStepLivenessActive extends EkycState {
+class EkycStepSelfieKtpActive extends EkycState {
   final String ktpPath;
   final String croppedFacePath;
   final String nik;
   final String name;
 
-  const EkycStepLivenessActive({
+  const EkycStepSelfieKtpActive({
     required this.ktpPath,
     required this.croppedFacePath,
     required this.nik,
@@ -46,14 +46,14 @@ class EkycStepLivenessActive extends EkycState {
   List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
 }
 
-class EkycStepLivenessCompleted extends EkycState {
+class EkycStepSelfieKtpCompleted extends EkycState {
   final String ktpPath;
   final String croppedFacePath;
   final String nik;
   final String name;
   final String selfiePath;
 
-  const EkycStepLivenessCompleted({
+  const EkycStepSelfieKtpCompleted({
     required this.ktpPath,
     required this.croppedFacePath,
     required this.nik,
@@ -63,6 +63,10 @@ class EkycStepLivenessCompleted extends EkycState {
 
   @override
   List<Object?> get props => [ktpPath, croppedFacePath, nik, name, selfiePath];
+}
+
+class EkycComparingLocalState extends EkycState {
+  const EkycComparingLocalState();
 }
 
 class EkycSubmittingState extends EkycState {

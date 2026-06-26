@@ -6,7 +6,7 @@ import '../bloc/ekyc_bloc.dart';
 import '../bloc/ekyc_event.dart';
 import '../bloc/ekyc_state.dart';
 import '../widgets/ktp_scanner_view.dart';
-import '../widgets/liveness_scanner_view.dart';
+import '../widgets/selfie_ktp_scanner_view.dart';
 
 class EkycPage extends StatefulWidget {
   const EkycPage({super.key});
@@ -43,7 +43,7 @@ class _EkycPageState extends State<EkycPage> {
   int _getCurrentStep(EkycState state) {
     if (state is EkycInitial || state is EkycStepKtpActive || state is EkycStepKtpCompleted) {
       return 0;
-    } else if (state is EkycStepLivenessActive || state is EkycStepLivenessCompleted) {
+    } else if (state is EkycStepSelfieKtpActive || state is EkycStepSelfieKtpCompleted) {
       return 1;
     } else {
       return 2;
@@ -165,7 +165,7 @@ class _EkycPageState extends State<EkycPage> {
         children: [
           _buildStepNode(0, 'Pindai KTP', currentStep >= 0, currentStep == 0),
           _buildStepDivider(currentStep >= 1),
-          _buildStepNode(1, 'Liveness Selfie', currentStep >= 1, currentStep == 1),
+          _buildStepNode(1, 'Selfie + KTP', currentStep >= 1, currentStep == 1),
           _buildStepDivider(currentStep >= 2),
           _buildStepNode(2, 'Hasil Verifikasi', currentStep >= 2, currentStep == 2),
         ],
@@ -240,21 +240,16 @@ class _EkycPageState extends State<EkycPage> {
       return _buildKtpReviewScreen(context, state);
     }
 
-    if (state is EkycStepLivenessActive) {
-      return LivenessScannerView(
+    if (state is EkycStepSelfieKtpActive) {
+      return SelfieKtpScannerView(
         onCaptured: (selfiePath) {
-          context.read<EkycBloc>().add(LivenessCaptured(selfiePath: selfiePath));
-        },
-        onTimeout: () {
-          context.read<EkycBloc>().add(const SetFailure(
-            'Liveness timeout! Anda tidak menyelesaikan tantangan dalam waktu 10 detik. Silakan ulangi.',
-          ));
+          context.read<EkycBloc>().add(SelfieKtpCaptured(selfiePath: selfiePath));
         },
       );
     }
 
-    if (state is EkycStepLivenessCompleted) {
-      return _buildLivenessReviewScreen(context, state);
+    if (state is EkycStepSelfieKtpCompleted) {
+      return _buildSelfieKtpReviewScreen(context, state);
     }
 
     if (state is EkycSuccessState) {
@@ -376,7 +371,7 @@ class _EkycPageState extends State<EkycPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    context.read<EkycBloc>().add(StartLivenessScan(
+                    context.read<EkycBloc>().add(StartSelfieKtpScan(
                       ktpPath: state.ktpPath,
                       croppedFacePath: state.croppedFacePath,
                       nik: state.nik,
@@ -419,7 +414,7 @@ class _EkycPageState extends State<EkycPage> {
     );
   }
 
-  Widget _buildLivenessReviewScreen(BuildContext context, EkycStepLivenessCompleted state) {
+  Widget _buildSelfieKtpReviewScreen(BuildContext context, EkycStepSelfieKtpCompleted state) {
     final isSimulated = state.selfiePath == 'simulated_selfie.jpg';
 
     return SingleChildScrollView(
@@ -428,12 +423,12 @@ class _EkycPageState extends State<EkycPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Verifikasi Liveness Sukses',
+            'Pratinjau Selfie & KTP',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tantangan keaktifan wajah lolos. Harap tinjau foto selfie Anda sebelum mengirim data.',
+            'Harap tinjau foto selfie memegang KTP Anda sebelum melakukan verifikasi.',
             style: TextStyle(color: Colors.grey, fontSize: 13),
           ),
           const SizedBox(height: 24),
@@ -464,8 +459,8 @@ class _EkycPageState extends State<EkycPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    // Retry Liveness Scan
-                    context.read<EkycBloc>().add(StartLivenessScan(
+                    // Retry Selfie Scan
+                    context.read<EkycBloc>().add(StartSelfieKtpScan(
                       ktpPath: state.ktpPath,
                       croppedFacePath: state.croppedFacePath,
                       nik: state.nik,
