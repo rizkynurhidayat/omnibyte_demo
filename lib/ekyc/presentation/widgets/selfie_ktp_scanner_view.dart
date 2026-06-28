@@ -1,17 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../../core/utils/permission_helper.dart';
 
 class SelfieKtpScannerView extends StatefulWidget {
+  final String expectedNik;
+  final String expectedName;
   final Function(String selfiePath) onCaptured;
 
   const SelfieKtpScannerView({
     super.key,
+    required this.expectedNik,
+    required this.expectedName,
     required this.onCaptured,
   });
 
@@ -22,7 +27,7 @@ class SelfieKtpScannerView extends StatefulWidget {
 class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
-  bool _isProcessingImage = false;
+
   bool _isCapturing = false;
   CameraLensDirection _lensDirection = CameraLensDirection.front;
 
@@ -34,15 +39,10 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
     ),
   );
 
-  String _validationStatus = "Posisikan wajah Anda di dalam oval...";
-  bool _isFaceDetected = false;
+  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
-  final Map<DeviceOrientation, int> _orientations = {
-    DeviceOrientation.portraitUp: 0,
-    DeviceOrientation.landscapeLeft: 90,
-    DeviceOrientation.portraitDown: 180,
-    DeviceOrientation.landscapeRight: 270,
-  };
+  String _validationStatus = "Posisikan wajah & KTP Anda, lalu tekan tombol foto.";
+
 
   @override
   void initState() {
@@ -79,7 +79,6 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
             setState(() {
               _isCameraInitialized = true;
             });
-            _startImageStream();
           }
         }
       } catch (e) {
@@ -91,67 +90,9 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
   Future<void> _switchCamera() async {
     if (_cameraController == null || !_isCameraInitialized) return;
     
-    try {
-      await _cameraController?.stopImageStream();
-    } catch (_) {}
-
-    setState(() {
-      _lensDirection = _lensDirection == CameraLensDirection.back
-          ? CameraLensDirection.front
-          : CameraLensDirection.back;
-      _isCameraInitialized = false;
-    });
-    
     await _cameraController?.dispose();
     _cameraController = null;
     await _initCamera();
-  }
-
-  void _startImageStream() {
-    if (_cameraController == null || !_isCameraInitialized) return;
-
-    _cameraController!.startImageStream((CameraImage image) async {
-      if (_isProcessingImage || _isCapturing) return;
-      _isProcessingImage = true;
-
-      try {
-        final inputImage = _inputImageFromCameraImage(image);
-        if (inputImage != null) {
-          final faces = await _faceDetector.processImage(inputImage);
-          _validateFacePresence(faces);
-        }
-      } catch (e) {
-        debugPrint('Error processing front camera face detection: $e');
-      } finally {
-        _isProcessingImage = false;
-      }
-    });
-  }
-
-  void _validateFacePresence(List<Face> faces) {
-    if (!mounted) return;
-
-    if (faces.isEmpty) {
-      setState(() {
-        _validationStatus = "Wajah tidak terdeteksi. Posisikan wajah di dalam oval.";
-        _isFaceDetected = false;
-      });
-    } else {
-      final face = faces.first;
-      final boundingBox = face.boundingBox;
-      // Simple validation: make sure the face is relatively centered/not cut off
-      if (boundingBox.width < 80) {
-        setState(() {
-          _validationStatus = "Dekatkan wajah Anda ke kamera.";
-          _isFaceDetected = false;
-        });
-      } else {
-        setState(() {
-          _validationStatus = "Wajah terdeteksi! Silakan pegang KTP dan ambil foto.";
-          _isFaceDetected = true;
-        });
-      }
-    }
   }
 
   Future<void> _captureSelfie() async {
@@ -162,25 +103,69 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
     });
 
     try {
-      try {
-        await _cameraController?.stopImageStream();
-      } catch (_) {}
-
       final file = await _cameraController!.takePicture();
+      
+      final inputImage = InputImage.fromFilePath(file.path);
+      
+      // 1. Analyze Face
+      final faces = await _faceDetector.processImage(inputImage);
+      if (faces.isEmpty) {
+        _showErrorAndReset("Wajah tidak terdeteksi. Posisikan wajah di dalam oval.");
+        return;
+      }
+      
+      // 2. Analyze KTP Text
+      final recognizedText = await _textRecognizer.processImage(inputImage);
+      final rawText = recognizedText.text.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+      final targetNik = widget.expectedNik.toLowerCase();
+      
+      final targetFullName = widget.expectedName.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
+      // Normalisasi teks untuk pembacaan angka (mengatasi typo OCR)
+      final normalizedNikText = rawText
+          .replaceAll(RegExp(r'[o]'), '0')
+          .replaceAll(RegExp(r'[l|i]'), '1')
+          .replaceAll('b', '6')
+          .replaceAll('s', '5');
+
+      bool isMatched = false;
+      // Validasi lebih ketat: Memerlukan kecocokan setidaknya 14 digit NIK atau kecocokan Nama Lengkap
+      bool isNikMatched = targetNik.length == 16 && normalizedNikText.contains(targetNik.substring(0, 14));
+      bool isNameMatched = targetFullName.length > 3 && rawText.contains(targetFullName);
+
+      if (isNikMatched || isNameMatched) {
+        isMatched = true;
+      }
+
+      if (!isMatched) {
+        _showErrorAndReset("KTP tidak terdeteksi atau data tidak cocok! Gunakan KTP yang sama.");
+        return;
+      }
+
+      // Success
       widget.onCaptured(file.path);
     } catch (e) {
       debugPrint("Selfie capture error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saat mengambil gambar: $e')),
-        );
-      }
+      _showErrorAndReset('Error saat menganalisis gambar: $e');
+    }
+  }
+
+  void _showErrorAndReset(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       setState(() {
         _isCapturing = false;
       });
-      _startImageStream();
     }
   }
+
+
 
   void _simulateSelfie() async {
     setState(() {
@@ -190,57 +175,13 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
     widget.onCaptured('simulated_selfie.jpg');
   }
 
-  InputImage? _inputImageFromCameraImage(CameraImage image) {
-    if (_cameraController == null) return null;
 
-    final camera = _cameraController!.description;
-    final sensorOrientation = camera.sensorOrientation;
-
-    InputImageRotation? rotation;
-    if (Platform.isIOS) {
-      rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
-    } else if (Platform.isAndroid) {
-      var rotationCompensation = _orientations[_cameraController!.value.deviceOrientation];
-      if (rotationCompensation == null) return null;
-      if (camera.lensDirection == CameraLensDirection.front) {
-        rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
-      } else {
-        rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
-      }
-      rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
-    }
-
-    if (rotation == null) return null;
-
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) return null;
-
-    if (image.planes.length != 1 && image.planes.length != 3) return null;
-
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: format,
-        bytesPerRow: image.planes[0].bytesPerRow,
-      ),
-    );
-  }
 
   @override
   void dispose() {
-    try {
-      _cameraController?.stopImageStream();
-    } catch (_) {}
     _cameraController?.dispose();
     _faceDetector.close();
+    _textRecognizer.close();
     super.dispose();
   }
 
@@ -251,7 +192,13 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         // Camera Preview
         if (_isCameraInitialized && _cameraController != null)
           Positioned.fill(
-            child: CameraPreview(_cameraController!),
+            child: _lensDirection == CameraLensDirection.front
+                ? Transform.scale(
+                    scaleX: -1,
+                    alignment: Alignment.center,
+                    child: CameraPreview(_cameraController!),
+                  )
+                : CameraPreview(_cameraController!),
           )
         else
           Container(
@@ -304,7 +251,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
               color: Colors.black.withAlpha(180),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _isFaceDetected ? Colors.green.withAlpha(120) : Colors.white24,
+                color: Colors.white24,
                 width: 1.5,
               ),
             ),
@@ -331,7 +278,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 16),
                   Text(
-                    'Mengambil gambar...',
+                    'Menganalisis gambar...',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -364,7 +311,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: _isCameraInitialized ? Colors.white : Colors.grey,
+                        color: _isCameraInitialized ? Colors.white : Colors.grey[300],
                         shape: BoxShape.circle,
                         boxShadow: const [
                           BoxShadow(
@@ -376,7 +323,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                       ),
                       child: Icon(
                         _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: _isCameraInitialized ? Theme.of(context).colorScheme.primary : Colors.grey[500],
                         size: 32,
                       ),
                     ),

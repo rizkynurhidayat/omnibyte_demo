@@ -10,8 +10,6 @@ import 'ekyc/data/repositories/ekyc_repository_impl.dart';
 import 'ekyc/domain/repositories/ekyc_repository.dart';
 import 'ekyc/domain/usecases/verify_ekyc_usecase.dart';
 import 'ekyc/presentation/bloc/ekyc_bloc.dart';
-import 'core/services/tflite_face_verifier.dart';
-
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
@@ -39,8 +37,6 @@ Future<void> initDependencies() async {
   // E-KYC Feature Registration
   // =========================================================================
   // Core Services
-  sl.registerLazySingleton(() => TfliteFaceVerifier());
-
   // Data Source
   sl.registerLazySingleton<EkycRemoteDataSource>(
     () => EkycRemoteDataSourceImpl(sl()),
@@ -48,7 +44,7 @@ Future<void> initDependencies() async {
 
   // Repository
   sl.registerLazySingleton<EkycRepository>(
-    () => EkycRepositoryImpl(sl(), sl()),
+    () => EkycRepositoryImpl(sl()),
   );
 
   // Use Cases

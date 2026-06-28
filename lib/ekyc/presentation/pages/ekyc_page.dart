@@ -241,6 +241,8 @@ class _EkycPageState extends State<EkycPage> {
 
     if (state is EkycStepSelfieKtpActive) {
       return SelfieKtpScannerView(
+        expectedNik: state.nik,
+        expectedName: state.name,
         onCaptured: (selfiePath) {
           context.read<EkycBloc>().add(SelfieKtpCaptured(selfiePath: selfiePath));
         },
