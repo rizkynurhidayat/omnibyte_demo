@@ -42,8 +42,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
 
   final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
-  String _validationStatus = "Posisikan wajah & KTP Anda, lalu tekan tombol foto.";
-
+  bool _isFaceDetectedLive = false;
 
   @override
   void initState() {
@@ -70,18 +69,11 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         final faces = await _faceDetector.processImage(inputImage);
         
         if (mounted && !_isCapturing) {
-          if (faces.isEmpty) {
-            if (_validationStatus != "Wajah tidak terdeteksi. Posisikan wajah di dalam oval.") {
-              setState(() {
-                _validationStatus = "Wajah tidak terdeteksi. Posisikan wajah di dalam oval.";
-              });
-            }
-          } else {
-            if (_validationStatus != "Wajah terdeteksi. Silakan ambil foto KTP & Selfie.") {
-              setState(() {
-                _validationStatus = "Wajah terdeteksi. Silakan ambil foto KTP & Selfie.";
-              });
-            }
+          final hasFace = faces.isNotEmpty;
+          if (_isFaceDetectedLive != hasFace) {
+            setState(() {
+              _isFaceDetectedLive = hasFace;
+            });
           }
         }
       } catch (e) {
@@ -331,26 +323,41 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
 
         // Status banner
         Positioned(
-          top: 30,
-          left: 20,
-          right: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.black.withAlpha(180),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white24,
-                width: 1.5,
+          top: 40,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _isFaceDetectedLive ? Colors.green : Colors.red,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  )
+                ],
               ),
-            ),
-            child: Text(
-              _validationStatus,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isFaceDetectedLive ? Icons.check_circle : Icons.warning_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isFaceDetectedLive ? 'Wajah Terdeteksi' : 'Wajah Tidak Terdeteksi',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -397,18 +404,18 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                     
                     // Shutter Button
                     GestureDetector(
-                      onTap: _isCameraInitialized ? _captureSelfie : null,
+                      onTap: (_isCameraInitialized && _isFaceDetectedLive) ? _captureSelfie : null,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.white24,
+                        decoration: BoxDecoration(
+                          color: (_isCameraInitialized && _isFaceDetectedLive) ? Colors.white24 : Colors.transparent,
                           shape: BoxShape.circle,
                         ),
                         child: Container(
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: _isCameraInitialized ? Colors.white : Colors.grey[300],
+                            color: (_isCameraInitialized && _isFaceDetectedLive) ? Colors.white : Colors.grey[400],
                             shape: BoxShape.circle,
                             boxShadow: const [
                               BoxShadow(
@@ -420,7 +427,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                           ),
                           child: Icon(
                             _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
-                            color: _isCameraInitialized ? Theme.of(context).colorScheme.primary : Colors.grey[500],
+                            color: (_isCameraInitialized && _isFaceDetectedLive) ? Theme.of(context).colorScheme.primary : Colors.grey[600],
                             size: 32,
                           ),
                         ),
