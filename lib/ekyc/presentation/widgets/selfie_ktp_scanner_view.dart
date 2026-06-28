@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../../core/utils/permission_helper.dart';
+import '../../../core/utils/string_utils.dart';
 
 class SelfieKtpScannerView extends StatefulWidget {
   final String expectedNik;
@@ -50,6 +51,76 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
     _initCamera();
   }
 
+  bool _isDetectingFace = false;
+
+  void _startLiveFaceDetection() {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+
+    _cameraController!.startImageStream((CameraImage image) async {
+      if (_isDetectingFace || _isCapturing) return;
+      _isDetectingFace = true;
+
+      try {
+        final inputImage = _inputImageFromCameraImage(image);
+        if (inputImage == null) {
+          _isDetectingFace = false;
+          return;
+        }
+
+        final faces = await _faceDetector.processImage(inputImage);
+        
+        if (mounted && !_isCapturing) {
+          if (faces.isEmpty) {
+            if (_validationStatus != "Wajah tidak terdeteksi. Posisikan wajah di dalam oval.") {
+              setState(() {
+                _validationStatus = "Wajah tidak terdeteksi. Posisikan wajah di dalam oval.";
+              });
+            }
+          } else {
+            if (_validationStatus != "Wajah terdeteksi. Silakan ambil foto KTP & Selfie.") {
+              setState(() {
+                _validationStatus = "Wajah terdeteksi. Silakan ambil foto KTP & Selfie.";
+              });
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Error detecting face live: $e");
+      } finally {
+        _isDetectingFace = false;
+      }
+    });
+  }
+
+  InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (_cameraController == null) return null;
+    final camera = _cameraController!.description;
+    final sensorOrientation = camera.sensorOrientation;
+    
+    InputImageRotation? rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+    if (rotation == null) return null;
+
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == null || (Platform.isAndroid && format != InputImageFormat.nv21) || (Platform.isIOS && format != InputImageFormat.bgra8888)) {
+       return null; 
+    }
+    if (image.planes.isEmpty) return null;
+
+    // Concatenate bytes for Android NV21 to be safe, but usually plane 0 contains all data.
+    // For flutter camera, plane 0 has the bytes.
+    final bytes = image.planes[0].bytes;
+
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: format,
+        bytesPerRow: image.planes[0].bytesPerRow,
+      ),
+    );
+  }
+
   Future<void> _initCamera() async {
     final permission = await PermissionHelper.requestCameraPermission();
     if (!mounted) return;
@@ -79,6 +150,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
             setState(() {
               _isCameraInitialized = true;
             });
+            _startLiveFaceDetection();
           }
         }
       } catch (e) {
@@ -90,6 +162,17 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
   Future<void> _switchCamera() async {
     if (_cameraController == null || !_isCameraInitialized) return;
     
+    if (_cameraController!.value.isStreamingImages) {
+      await _cameraController!.stopImageStream();
+    }
+
+    setState(() {
+      _lensDirection = _lensDirection == CameraLensDirection.front
+          ? CameraLensDirection.back
+          : CameraLensDirection.front;
+      _isCameraInitialized = false;
+    });
+
     await _cameraController?.dispose();
     _cameraController = null;
     await _initCamera();
@@ -103,14 +186,21 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
     });
 
     try {
+      if (_cameraController!.value.isStreamingImages) {
+        await _cameraController!.stopImageStream();
+      }
+      
+      // Memberi sedikit jeda agar kamera selesai menutup stream sebelum mengambil foto
+      await Future.delayed(const Duration(milliseconds: 300));
+      
       final file = await _cameraController!.takePicture();
       
       final inputImage = InputImage.fromFilePath(file.path);
       
-      // 1. Analyze Face
+      // 1. Analyze Face (dilakukan kembali pada hasil foto untuk memastikan wajah ada)
       final faces = await _faceDetector.processImage(inputImage);
       if (faces.isEmpty) {
-        _showErrorAndReset("Wajah tidak terdeteksi. Posisikan wajah di dalam oval.");
+        _showErrorAndReset("Wajah tidak terdeteksi di hasil foto. Posisikan wajah di dalam oval.");
         return;
       }
       
@@ -129,11 +219,21 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
           .replaceAll('s', '5');
 
       bool isMatched = false;
-      // Validasi lebih ketat: Memerlukan kecocokan setidaknya 14 digit NIK atau kecocokan Nama Lengkap
-      bool isNikMatched = targetNik.length == 16 && normalizedNikText.contains(targetNik.substring(0, 14));
-      bool isNameMatched = targetFullName.length > 3 && rawText.contains(targetFullName);
+      
+      // Menggunakan Fuzzy String Matching (Levenshtein Distance)
+      // Membutuhkan kemiripan NIK (minimal 14 digit) > 85% ATAU Nama Lengkap > 85%
+      double nikSimilarity = 0.0;
+      if (targetNik.length == 16) {
+         nikSimilarity = StringUtils.findBestMatch(normalizedNikText, targetNik.substring(0, 14));
+      }
+      
+      double nameSimilarity = 0.0;
+      if (targetFullName.length > 3) {
+         nameSimilarity = StringUtils.findBestMatch(rawText, targetFullName);
+      }
 
-      if (isNikMatched || isNameMatched) {
+      // Ambang batas kemiripan (threshold) disetel ke 0.85 (85%)
+      if (nikSimilarity > 0.85 || nameSimilarity > 0.85) {
         isMatched = true;
       }
 
@@ -162,6 +262,8 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
       setState(() {
         _isCapturing = false;
       });
+      // Restart live face detection after an error
+      _startLiveFaceDetection();
     }
   }
 
@@ -227,19 +329,6 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
           ),
         ),
 
-        // Floating Camera Switch Button
-        Positioned(
-          top: 15,
-          right: 15,
-          child: CircleAvatar(
-            backgroundColor: Colors.black54,
-            child: IconButton(
-              icon: const Icon(Icons.flip_camera_android, color: Colors.white),
-              onPressed: _switchCamera,
-            ),
-          ),
-        ),
-
         // Status banner
         Positioned(
           top: 30,
@@ -299,53 +388,58 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  onTap: _isCameraInitialized ? _captureSelfie : null,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.white24,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: _isCameraInitialized ? Colors.white : Colors.grey[300],
-                        shape: BoxShape.circle,
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black38,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          )
-                        ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Placeholder to balance the switch camera button
+                    const SizedBox(width: 48), 
+                    const SizedBox(width: 32),
+                    
+                    // Shutter Button
+                    GestureDetector(
+                      onTap: _isCameraInitialized ? _captureSelfie : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white24,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: _isCameraInitialized ? Colors.white : Colors.grey[300],
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black38,
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
+                            color: _isCameraInitialized ? Theme.of(context).colorScheme.primary : Colors.grey[500],
+                            size: 32,
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
-                        color: _isCameraInitialized ? Theme.of(context).colorScheme.primary : Colors.grey[500],
-                        size: 32,
+                    ),
+                    
+                    const SizedBox(width: 32),
+                    
+                    // Switch Camera Button
+                    CircleAvatar(
+                      backgroundColor: Colors.black54,
+                      child: IconButton(
+                        icon: const Icon(Icons.flip_camera_android, color: Colors.white),
+                        onPressed: _switchCamera,
                       ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: _simulateSelfie,
-                  style: TextButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary.withAlpha(200),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  icon: const Icon(Icons.bolt, size: 18),
-                  label: const Text(
-                    'Gunakan Simulator (Bypass Kamera)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
+                // Simulator button hidden
               ],
             ),
           ),
@@ -362,7 +456,7 @@ class SelfieKtpCutoutPainter extends CustomPainter {
     // 1. Oval size & center at the top
     final ovalWidth = size.width * 0.55;
     final ovalHeight = size.height * 0.33;
-    final ovalCenter = Offset(size.width / 2, size.height * 0.35);
+    final ovalCenter = Offset(size.width / 2, size.height * 0.25);
     final ovalRect = Rect.fromCenter(
       center: ovalCenter,
       width: ovalWidth,
@@ -371,8 +465,8 @@ class SelfieKtpCutoutPainter extends CustomPainter {
 
     // 2. Rectangle size & center for KTP at the bottom
     final ktpWidth = size.width * 0.55;
-    final ktpHeight = size.height * 0.16;
-    final ktpCenter = Offset(size.width / 2, size.height * 0.72);
+    final ktpHeight = size.height * 0.18;
+    final ktpCenter = Offset(size.width / 2, size.height * 0.65);
     final ktpRect = Rect.fromCenter(
       center: ktpCenter,
       width: ktpWidth,
@@ -419,7 +513,7 @@ class SelfieKtpCutoutPainter extends CustomPainter {
     );
 
     textPainter.text = const TextSpan(
-      text: "PEgang KTP DI SINI",
+      text: "Pegang KTP DI SINI",
       style: TextStyle(
         color: Colors.white,
         fontSize: 12,

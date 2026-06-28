@@ -411,19 +411,6 @@ class _KtpScannerViewState extends State<KtpScannerView> {
           ),
         ),
 
-        // Floating Camera Switch Button
-        Positioned(
-          top: 15,
-          right: 15,
-          child: CircleAvatar(
-            backgroundColor: Colors.black54,
-            child: IconButton(
-              icon: const Icon(Icons.flip_camera_android, color: Colors.white),
-              onPressed: _switchCamera,
-            ),
-          ),
-        ),
-
         // Guidance HUD
         Positioned(
           top: 40,
@@ -493,55 +480,58 @@ class _KtpScannerViewState extends State<KtpScannerView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Real Shutter Button (only active if camera init)
-                GestureDetector(
-                  onTap: _isCameraInitialized ? _captureKtp : null,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.white24,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: _isCameraInitialized ? Colors.white : Colors.grey,
-                        shape: BoxShape.circle,
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black38,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          )
-                        ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Placeholder to balance the switch camera button
+                    const SizedBox(width: 48), 
+                    const SizedBox(width: 32),
+                    
+                    // Real Shutter Button
+                    GestureDetector(
+                      onTap: _isCameraInitialized ? _captureKtp : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white24,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: _isCameraInitialized ? Colors.white : Colors.grey,
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black38,
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.camera_alt,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 32,
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        Icons.camera_alt,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 32,
+                    ),
+                    
+                    const SizedBox(width: 32),
+                    
+                    // Switch Camera Button
+                    CircleAvatar(
+                      backgroundColor: Colors.black54,
+                      child: IconButton(
+                        icon: const Icon(Icons.flip_camera_android, color: Colors.white),
+                        onPressed: _switchCamera,
                       ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                // Simulator Bypass Button
-                TextButton.icon(
-                  onPressed: _simulateKtp,
-                  style: TextButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary.withAlpha(200),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  icon: const Icon(Icons.bolt, size: 18),
-                  label: const Text(
-                    'Gunakan Simulator (Bypass Kamera)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
+                // Simulator button is hidden for production
               ],
             ),
           ),
