@@ -23,6 +23,8 @@ class EkycRepositoryImpl implements EkycRepository {
         ktpFile: ktpFile,
         ktpFaceFile: ktpFaceFile,
         selfieFile: selfieFile,
+        nik: nik,
+        name: name,
       );
 
       return Right(result);

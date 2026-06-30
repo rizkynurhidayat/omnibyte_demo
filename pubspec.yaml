@@ -50,6 +50,8 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.1
   get_it: ^9.2.1
   image: ^4.2.0
+  tusc: ^3.0.0
+  cross_file: ^0.3.5+2
 dev_dependencies:
   flutter_test:
     sdk: flutter
