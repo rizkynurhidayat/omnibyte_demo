@@ -6,18 +6,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/permission_helper.dart';
 import '../../../core/utils/string_utils.dart';
 
 class SelfieKtpScannerView extends StatefulWidget {
   final String expectedNik;
   final String expectedName;
-  final Function(String selfiePath) onCaptured;
+  final String ktpPath;
+  final Function(String selfiePath, String croppedSelfieFacePath, String croppedKtpFacePath) onCaptured;
 
   const SelfieKtpScannerView({
     super.key,
     required this.expectedNik,
     required this.expectedName,
+    required this.ktpPath,
     required this.onCaptured,
   });
 
@@ -234,8 +237,52 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         return;
       }
 
-      // Success
-      widget.onCaptured(file.path);
+      // Sort all detected faces by bounding box size descending
+      // The largest face is the user's real face, and the second largest (if present) is the face on the KTP card.
+      faces.sort((a, b) {
+        final areaA = a.boundingBox.width * a.boundingBox.height;
+        final areaB = b.boundingBox.width * b.boundingBox.height;
+        return areaB.compareTo(areaA);
+      });
+
+      final userFace = faces[0];
+      Face? ktpFaceOnSelfie;
+      if (faces.length > 1) {
+        ktpFaceOnSelfie = faces[1];
+      }
+
+      // Crop face area from selfie image for the user's face
+      final userBbox = userFace.boundingBox;
+      final croppedSelfieFaceFile = await ImageUtils.cropFace(
+        file.path,
+        userBbox.left.toInt(),
+        userBbox.top.toInt(),
+        userBbox.width.toInt(),
+        userBbox.height.toInt(),
+        suffix: '_selfieface',
+      );
+
+      // Crop KTP face. Try to crop it from the selfie photo if detected; otherwise fallback to cropping from Step 1 KTP photo.
+      File croppedKtpFaceFile;
+      if (ktpFaceOnSelfie != null) {
+        final ktpBbox = ktpFaceOnSelfie.boundingBox;
+        
+        // We crop the KTP face from the selfie file path using _ktpselfieface suffix
+        croppedKtpFaceFile = await ImageUtils.cropFace(
+          file.path,
+          ktpBbox.left.toInt(),
+          ktpBbox.top.toInt(),
+          ktpBbox.width.toInt(),
+          ktpBbox.height.toInt(),
+          suffix: '_ktpselfieface',
+        );
+      } else {
+        // Fallback: Crop from Step 1 KTP image
+        croppedKtpFaceFile = await ImageUtils.cropKtpFace(widget.ktpPath);
+      }
+
+      // Success - Callback with selfie path, cropped selfie face path, and cropped KTP face path
+      widget.onCaptured(file.path, croppedSelfieFaceFile.path, croppedKtpFaceFile.path);
     } catch (e) {
       debugPrint("Selfie capture error: $e");
       _showErrorAndReset('Error saat menganalisis gambar: $e');
@@ -261,12 +308,13 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
 
 
 
+  // ignore: unused_element
   void _simulateSelfie() async {
     setState(() {
       _isCapturing = true;
     });
     await Future.delayed(const Duration(seconds: 1));
-    widget.onCaptured('simulated_selfie.jpg');
+    widget.onCaptured('simulated_selfie.jpg', 'simulated_selfie_face.jpg', 'simulated_ktp_face.jpg');
   }
 
 

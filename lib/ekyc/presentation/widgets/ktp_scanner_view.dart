@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +8,7 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/permission_helper.dart';
 
 class KtpScannerView extends StatefulWidget {
-  final Function(String ktpPath, String croppedFacePath, String nik, String name) onCaptured;
+  final Function(String ktpPath, String croppedFacePath, String ocrJsonPath, String nik, String name) onCaptured;
 
   const KtpScannerView({super.key, required this.onCaptured});
 
@@ -118,8 +120,26 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       // 5. Crop face area from KTP image
       final croppedFaceFile = await ImageUtils.cropKtpFace(file.path);
 
+      // Collect all lines
+      final linesList = <String>[];
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          linesList.add(line.text);
+        }
+      }
+
+      // Save OCR details as ocr.json with full parsed data, raw text, and individual lines list
+      final ocrJsonPath = file.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
+      final ocrMap = {
+        'nik': finalNik,
+        'name': name,
+        'raw_text': rawText,
+        'lines': linesList,
+      };
+      await File(ocrJsonPath).writeAsString(jsonEncode(ocrMap));
+
       // 6. Callback success
-      widget.onCaptured(file.path, croppedFaceFile.path, finalNik, name);
+      widget.onCaptured(file.path, croppedFaceFile.path, ocrJsonPath, finalNik, name);
     } catch (e) {
       debugPrint("KTP Capture error: $e");
       if (mounted) {
@@ -346,6 +366,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         .replaceAll('ï', 'i');
   }
 
+  // ignore: unused_element
   void _simulateKtp() async {
     setState(() {
       _isProcessing = true;
@@ -355,10 +376,12 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     // Setup dummy paths
     final dummyPath = 'simulated_ktp.jpg';
     final dummyFacePath = 'simulated_ktp_face.jpg';
+    final dummyOcrJsonPath = 'simulated_ocr.json';
     
     widget.onCaptured(
       dummyPath,
       dummyFacePath,
+      dummyOcrJsonPath,
       '3273012345678901',
       'RIZKY NURHIDAYAT',
     );

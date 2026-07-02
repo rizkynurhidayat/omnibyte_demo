@@ -11,15 +11,19 @@ class VerifyEkycUseCase {
 
   Future<Either<Failure, EkycVerificationEntity>> call({
     required File ktpFile,
-    required File ktpFaceFile,
     required File selfieFile,
+    required File selfieFaceFile,
+    required File ktpFaceFile,
+    required File ocrJsonFile,
     required String nik,
     required String name,
   }) async {
     return await repository.verifyEkyc(
       ktpFile: ktpFile,
-      ktpFaceFile: ktpFaceFile,
       selfieFile: selfieFile,
+      selfieFaceFile: selfieFaceFile,
+      ktpFaceFile: ktpFaceFile,
+      ocrJsonFile: ocrJsonFile,
       nik: nik,
       name: name,
     );

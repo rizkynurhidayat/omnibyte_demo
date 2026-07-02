@@ -13,16 +13,20 @@ class EkycRepositoryImpl implements EkycRepository {
   @override
   Future<Either<Failure, EkycVerificationEntity>> verifyEkyc({
     required File ktpFile,
-    required File ktpFaceFile,
     required File selfieFile,
+    required File selfieFaceFile,
+    required File ktpFaceFile,
+    required File ocrJsonFile,
     required String nik,
     required String name,
   }) async {
     try {
       final result = await remoteDataSource.verifyEkyc(
         ktpFile: ktpFile,
-        ktpFaceFile: ktpFaceFile,
         selfieFile: selfieFile,
+        selfieFaceFile: selfieFaceFile,
+        ktpFaceFile: ktpFaceFile,
+        ocrJsonFile: ocrJsonFile,
         nik: nik,
         name: name,
       );

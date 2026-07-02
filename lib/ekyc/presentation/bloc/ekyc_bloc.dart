@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../domain/usecases/verify_ekyc_usecase.dart';
@@ -29,6 +31,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     emit(EkycStepKtpCompleted(
       ktpPath: event.ktpPath,
       croppedFacePath: event.croppedFacePath,
+      ocrJsonPath: event.ocrJsonPath,
       nik: event.nik,
       name: event.name,
     ));
@@ -38,6 +41,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     emit(EkycStepSelfieKtpActive(
       ktpPath: event.ktpPath,
       croppedFacePath: event.croppedFacePath,
+      ocrJsonPath: event.ocrJsonPath,
       nik: event.nik,
       name: event.name,
     ));
@@ -49,9 +53,12 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
       emit(EkycStepSelfieKtpCompleted(
         ktpPath: currentState.ktpPath,
         croppedFacePath: currentState.croppedFacePath,
+        ocrJsonPath: currentState.ocrJsonPath,
         nik: currentState.nik,
         name: currentState.name,
         selfiePath: event.selfiePath,
+        croppedSelfieFacePath: event.croppedSelfieFacePath,
+        croppedKtpFacePath: event.croppedKtpFacePath,
       ));
     }
   }
@@ -68,14 +75,19 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     try {
       // 1. Perform Image Compression (< 1 MB per image)
       final ktpCompressed = await ImageUtils.compressImage(currentState.ktpPath);
-      final faceCompressed = await ImageUtils.compressImage(currentState.croppedFacePath);
       final selfieCompressed = await ImageUtils.compressImage(currentState.selfiePath);
+      final selfieFaceCompressed = await ImageUtils.compressImage(currentState.croppedSelfieFacePath);
+      final ktpFaceCompressed = await ImageUtils.compressImage(currentState.croppedKtpFacePath);
+
+      final ocrJsonFile = File(currentState.ocrJsonPath);
 
       // 2. Call verification use case
       final result = await verifyEkycUseCase(
         ktpFile: ktpCompressed,
-        ktpFaceFile: faceCompressed,
         selfieFile: selfieCompressed,
+        selfieFaceFile: selfieFaceCompressed,
+        ktpFaceFile: ktpFaceCompressed,
+        ocrJsonFile: ocrJsonFile,
         nik: currentState.nik,
         name: currentState.name,
       );

@@ -224,10 +224,11 @@ class _EkycPageState extends State<EkycPage> {
   Widget _buildStepBody(BuildContext context, EkycState state) {
     if (state is EkycStepKtpActive) {
       return KtpScannerView(
-        onCaptured: (ktpPath, croppedFacePath, nik, name) {
+        onCaptured: (ktpPath, croppedFacePath, ocrJsonPath, nik, name) {
           context.read<EkycBloc>().add(KtpCaptured(
                 ktpPath: ktpPath,
                 croppedFacePath: croppedFacePath,
+                ocrJsonPath: ocrJsonPath,
                 nik: nik,
                 name: name,
               ));
@@ -243,8 +244,13 @@ class _EkycPageState extends State<EkycPage> {
       return SelfieKtpScannerView(
         expectedNik: state.nik,
         expectedName: state.name,
-        onCaptured: (selfiePath) {
-          context.read<EkycBloc>().add(SelfieKtpCaptured(selfiePath: selfiePath));
+        ktpPath: state.ktpPath,
+        onCaptured: (selfiePath, croppedSelfieFacePath, croppedKtpFacePath) {
+          context.read<EkycBloc>().add(SelfieKtpCaptured(
+                selfiePath: selfiePath,
+                croppedSelfieFacePath: croppedSelfieFacePath,
+                croppedKtpFacePath: croppedKtpFacePath,
+              ));
         },
       );
     }
@@ -377,6 +383,7 @@ class _EkycPageState extends State<EkycPage> {
                     context.read<EkycBloc>().add(StartSelfieKtpScan(
                       ktpPath: state.ktpPath,
                       croppedFacePath: state.croppedFacePath,
+                      ocrJsonPath: state.ocrJsonPath,
                       nik: state.nik,
                       name: state.name,
                     ));
@@ -436,19 +443,78 @@ class _EkycPageState extends State<EkycPage> {
           ),
           const SizedBox(height: 24),
 
-          // Selfie Preview
-          Center(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                width: 220,
-                height: 300,
-                color: Colors.grey[200],
-                child: isSimulated
-                    ? const Icon(Icons.face, size: 100, color: Colors.grey)
-                    : Image.file(File(state.selfiePath), fit: BoxFit.cover),
+          // Selfie Preview and Cropped Face Details
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Main Selfie Preview
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Foto Selfie + KTP',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 240,
+                        color: Colors.grey[200],
+                        child: isSimulated
+                            ? const Center(child: Icon(Icons.face, size: 80, color: Colors.grey))
+                            : Image.file(File(state.selfiePath), fit: BoxFit.cover, width: double.infinity),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: 16),
+              // Cropped face cards side-by-side or stacked
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Wajah Selfie',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 100,
+                        width: double.infinity,
+                        color: Colors.grey[200],
+                        child: state.croppedSelfieFacePath == 'simulated_selfie_face.jpg'
+                            ? const Center(child: Icon(Icons.person, size: 40, color: Colors.grey))
+                            : Image.file(File(state.croppedSelfieFacePath), fit: BoxFit.cover),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Wajah KTP (dari Selfie)',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 100,
+                        width: double.infinity,
+                        color: Colors.grey[200],
+                        child: state.croppedKtpFacePath == 'simulated_ktp_face.jpg'
+                            ? const Center(child: Icon(Icons.person, size: 40, color: Colors.grey))
+                            : Image.file(File(state.croppedKtpFacePath), fit: BoxFit.cover),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 32),
 
@@ -468,6 +534,7 @@ class _EkycPageState extends State<EkycPage> {
                     context.read<EkycBloc>().add(StartSelfieKtpScan(
                       ktpPath: state.ktpPath,
                       croppedFacePath: state.croppedFacePath,
+                      ocrJsonPath: state.ocrJsonPath,
                       nik: state.nik,
                       name: state.name,
                     ));

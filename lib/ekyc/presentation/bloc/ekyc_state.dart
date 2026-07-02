@@ -15,54 +15,73 @@ class EkycStepKtpActive extends EkycState {}
 class EkycStepKtpCompleted extends EkycState {
   final String ktpPath;
   final String croppedFacePath;
+  final String ocrJsonPath;
   final String nik;
   final String name;
 
   const EkycStepKtpCompleted({
     required this.ktpPath,
     required this.croppedFacePath,
+    required this.ocrJsonPath,
     required this.nik,
     required this.name,
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
+  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name];
 }
 
 class EkycStepSelfieKtpActive extends EkycState {
   final String ktpPath;
   final String croppedFacePath;
+  final String ocrJsonPath;
   final String nik;
   final String name;
 
   const EkycStepSelfieKtpActive({
     required this.ktpPath,
     required this.croppedFacePath,
+    required this.ocrJsonPath,
     required this.nik,
     required this.name,
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, nik, name];
+  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name];
 }
 
 class EkycStepSelfieKtpCompleted extends EkycState {
   final String ktpPath;
   final String croppedFacePath;
+  final String ocrJsonPath;
   final String nik;
   final String name;
   final String selfiePath;
+  final String croppedSelfieFacePath;
+  final String croppedKtpFacePath;
 
   const EkycStepSelfieKtpCompleted({
     required this.ktpPath,
     required this.croppedFacePath,
+    required this.ocrJsonPath,
     required this.nik,
     required this.name,
     required this.selfiePath,
+    required this.croppedSelfieFacePath,
+    required this.croppedKtpFacePath,
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, nik, name, selfiePath];
+  List<Object?> get props => [
+        ktpPath,
+        croppedFacePath,
+        ocrJsonPath,
+        nik,
+        name,
+        selfiePath,
+        croppedSelfieFacePath,
+        croppedKtpFacePath,
+      ];
 }
 
 class EkycComparingLocalState extends EkycState {

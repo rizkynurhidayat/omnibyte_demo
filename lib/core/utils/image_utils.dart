@@ -6,6 +6,7 @@ class ImageUtils {
   /// Checks if the image is too dark by computing the average luminance of its pixels.
   /// A threshold of 50.0 (out of 255) is typically used.
   static Future<bool> isImageTooDark(String imagePath, {double threshold = 50.0}) async {
+    if (imagePath.startsWith('simulated_')) return false;
     return compute(_checkDarknessAsync, _DarknessParams(imagePath, threshold));
   }
 
@@ -42,11 +43,13 @@ class ImageUtils {
   /// Crops the face area from a horizontal KTP image based on the standard card layout.
   /// (Typically the photo resides on the right side: X ~ 60-95%, Y ~ 15-85%).
   static Future<File> cropKtpFace(String ktpImagePath) async {
+    if (ktpImagePath.startsWith('simulated_')) return File('simulated_ktp_face.jpg');
     final resultPath = await compute(_cropKtpFaceAsync, ktpImagePath);
     return File(resultPath);
   }
 
   static String _cropKtpFaceAsync(String ktpImagePath) {
+    if (ktpImagePath.startsWith('simulated_')) return 'simulated_ktp_face.jpg';
     final file = File(ktpImagePath);
     if (!file.existsSync()) throw Exception("KTP image file not found");
     final bytes = file.readAsBytesSync();
@@ -87,8 +90,53 @@ class ImageUtils {
     return croppedPath;
   }
 
+  /// Crops the face area from a selfie image based on the detected bounding box coordinates.
+  static Future<File> cropFace(String imagePath, int left, int top, int width, int height, {String suffix = '_face'}) async {
+    if (imagePath.startsWith('simulated_')) return File('simulated_selfie_face.jpg');
+    final resultPath = await compute(
+      _cropFaceAsync,
+      _CropFaceParams(imagePath, left, top, width, height, suffix),
+    );
+    return File(resultPath);
+  }
+
+  static String _cropFaceAsync(_CropFaceParams params) {
+    if (params.imagePath.startsWith('simulated_')) {
+      return 'simulated_selfie_face.jpg';
+    }
+    final file = File(params.imagePath);
+    if (!file.existsSync()) throw Exception("Image file not found for face cropping");
+    final bytes = file.readAsBytesSync();
+    final image = img.decodeImage(bytes);
+    if (image == null) throw Exception("Failed to decode image for face cropping");
+
+    final imgWidth = image.width;
+    final imgHeight = image.height;
+
+    final x = params.left.clamp(0, imgWidth - 1);
+    final y = params.top.clamp(0, imgHeight - 1);
+    final w = params.width.clamp(1, imgWidth - x);
+    final h = params.height.clamp(1, imgHeight - y);
+
+    final croppedImage = img.copyCrop(
+      image,
+      x: x,
+      y: y,
+      width: w,
+      height: h,
+    );
+
+    final extension = params.imagePath.toLowerCase().endsWith('.png') ? '.png' : '.jpg';
+    final croppedPath = params.imagePath.replaceAll(extension, '${params.suffix}$extension');
+    final croppedFile = File(croppedPath);
+    croppedFile.writeAsBytesSync(img.encodeJpg(croppedImage));
+
+    return croppedPath;
+  }
+
   /// Compresses the image iteratively until its size is under the specified threshold (default 1MB).
   static Future<File> compressImage(String imagePath, {int maxSizeBytes = 1024 * 1024}) async {
+    if (imagePath.startsWith('simulated_')) return File(imagePath);
     final resultPath = await compute(
       _compressImageAsync,
       _CompressParams(imagePath, maxSizeBytes),
@@ -97,6 +145,9 @@ class ImageUtils {
   }
 
   static String _compressImageAsync(_CompressParams params) {
+    if (params.imagePath.startsWith('simulated_')) {
+      return params.imagePath;
+    }
     final file = File(params.imagePath);
     if (!file.existsSync()) throw Exception("Image file not found for compression");
     
@@ -146,4 +197,14 @@ class _CompressParams {
   final String imagePath;
   final int maxSizeBytes;
   _CompressParams(this.imagePath, this.maxSizeBytes);
+}
+
+class _CropFaceParams {
+  final String imagePath;
+  final int left;
+  final int top;
+  final int width;
+  final int height;
+  final String suffix;
+  _CropFaceParams(this.imagePath, this.left, this.top, this.width, this.height, this.suffix);
 }
