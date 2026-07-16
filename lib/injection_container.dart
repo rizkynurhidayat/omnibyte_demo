@@ -9,6 +9,7 @@ import 'ekyc/data/datasources/ekyc_remote_data_source.dart';
 import 'ekyc/data/repositories/ekyc_repository_impl.dart';
 import 'ekyc/domain/repositories/ekyc_repository.dart';
 import 'ekyc/domain/usecases/verify_ekyc_usecase.dart';
+import 'ekyc/domain/usecases/check_ekyc_status_usecase.dart';
 import 'ekyc/presentation/bloc/ekyc_bloc.dart';
 final sl = GetIt.instance;
 
@@ -49,7 +50,11 @@ Future<void> initDependencies() async {
 
   // Use Cases
   sl.registerLazySingleton(() => VerifyEkycUseCase(sl()));
+  sl.registerLazySingleton(() => CheckEkycStatusUseCase(sl()));
 
   // Bloc
-  sl.registerFactory(() => EkycBloc(verifyEkycUseCase: sl()));
+  sl.registerFactory(() => EkycBloc(
+    verifyEkycUseCase: sl(),
+    checkEkycStatusUseCase: sl(),
+  ));
 }

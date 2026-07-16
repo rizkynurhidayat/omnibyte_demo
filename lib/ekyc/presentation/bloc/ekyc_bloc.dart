@@ -3,19 +3,25 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../domain/usecases/verify_ekyc_usecase.dart';
+import '../../domain/usecases/check_ekyc_status_usecase.dart';
 import 'ekyc_event.dart';
 import 'ekyc_state.dart';
 
 class EkycBloc extends Bloc<EkycEvent, EkycState> {
   final VerifyEkycUseCase verifyEkycUseCase;
+  final CheckEkycStatusUseCase checkEkycStatusUseCase;
 
-  EkycBloc({required this.verifyEkycUseCase}) : super(EkycInitial()) {
+  EkycBloc({
+    required this.verifyEkycUseCase,
+    required this.checkEkycStatusUseCase,
+  }) : super(EkycInitial()) {
     on<ResetEkyc>(_onResetEkyc);
     on<KtpCaptured>(_onKtpCaptured);
     on<StartSelfieKtpScan>(_onStartSelfieKtpScan);
     on<RestoreState>(_onRestoreState);
     on<SelfieKtpCaptured>(_onSelfieKtpCaptured);
     on<SubmitVerification>(_onSubmitVerification);
+    on<RefreshVerificationStatus>(_onRefreshVerificationStatus);
     on<SetFailure>(_onSetFailure);
   }
 
@@ -102,6 +108,34 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     } catch (e) {
       emit(EkycFailureState(
         errorMessage: 'Terjadi kesalahan saat memproses gambar: ${e.toString()}',
+        fallbackState: currentState,
+      ));
+    }
+  }
+
+  Future<void> _onRefreshVerificationStatus(
+    RefreshVerificationStatus event,
+    Emitter<EkycState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! EkycSuccessState) return;
+
+    // Show loading indicator
+    emit(const EkycSubmittingState());
+
+    try {
+      final result = await checkEkycStatusUseCase(event.tusUploadId);
+
+      result.fold(
+        (failure) => emit(EkycFailureState(
+          errorMessage: failure.message,
+          fallbackState: currentState,
+        )),
+        (successEntity) => emit(EkycSuccessState(successEntity)),
+      );
+    } catch (e) {
+      emit(EkycFailureState(
+        errorMessage: 'Terjadi kesalahan saat mengecek status: ${e.toString()}',
         fallbackState: currentState,
       ));
     }

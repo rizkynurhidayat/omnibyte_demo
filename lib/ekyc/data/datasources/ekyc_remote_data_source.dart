@@ -16,6 +16,8 @@ abstract class EkycRemoteDataSource {
     required String nik,
     required String name,
   });
+
+  Future<EkycVerificationModel> checkEkycStatus(String tusUploadId);
 }
 
 class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
@@ -33,6 +35,7 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
     required String nik,
     required String name,
   }) async {
+    String? fallbackTusId;
     try {
       final firstName = name.toLowerCase().split(' ').first;
       
@@ -80,16 +83,26 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
       );
 
       final zipUrl = await completer.future;
-      // ignore: avoid_print
-      print('uploadedZipUrl: $zipUrl');
+      final tusUploadId = zipUrl.split('/').last;
+      fallbackTusId = tusUploadId;
+      
+      // Call POST to /ekyc/upload
+      await dio.post(
+        'https://oscore-dummy.coworker.id/ekyc/upload',
+        data: {
+          "tus_upload_id": tusUploadId,
+          "image_role": "zip",
+          "file_url": zipUrl,
+        },
+      );
 
+      // Return pending state to the UI to show the processing screen
       return EkycVerificationModel(
-        status: 'success',
-        message: 'Verifikasi berhasil. File ZIP diunggah ke: $zipUrl',
+        status: 'pending',
+        message: 'Data berhasil diunggah. Menunggu proses verifikasi.',
+        tusUploadId: tusUploadId,
         nik: nik,
         nama: name,
-        similarityScore: 92.4,
-        livenessScore: 95.8,
       );
     } catch (e) {
       // Fallback dummy data if connection fails or server is offline, so the demo runs.
@@ -97,13 +110,30 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
       print('Error during e-KYC verification: $e');
       await Future.delayed(const Duration(seconds: 2));
       return EkycVerificationModel(
-        status: 'success',
+        status: 'completed',
         message: 'Verifikasi biometrik e-KYC berhasil (Mock). Detail upload error: $e',
+        tusUploadId: fallbackTusId,
         nik: nik,
         nama: name,
         similarityScore: 92.4,
-        livenessScore: 95.8,
       );
+    }
+  }
+
+  @override
+  Future<EkycVerificationModel> checkEkycStatus(String tusUploadId) async {
+    try {
+      final response = await dio.get(
+        'https://oscore-dummy.coworker.id/ekyc/status/$tusUploadId',
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        return EkycVerificationModel.fromJson(response.data);
+      } else {
+        throw Exception('Gagal mendapatkan status verifikasi (Kode HTTP ${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Gagal menghubungi server: ${e.toString()}');
     }
   }
 }

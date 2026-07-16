@@ -566,7 +566,24 @@ class _EkycPageState extends State<EkycPage> {
 
   Widget _buildSuccessScreen(BuildContext context, EkycSuccessState state) {
     final result = state.verificationResult;
-    final isSuccess = result.status == 'success';
+    final statusLower = result.status.toLowerCase();
+    
+    final isSuccess = statusLower == 'completed';
+    final isFailed = statusLower == 'failed';
+    final isPending = statusLower == 'pending' || statusLower == 'processing';
+
+    if (isPending && result.tusUploadId != null) {
+      return _buildPendingScreen(context, result.tusUploadId!);
+    }
+
+    // Determine colors based on status (green for completed, red for failed, etc.)
+    final Color iconColor = isSuccess 
+        ? Theme.of(context).colorScheme.secondary 
+        : Theme.of(context).colorScheme.error;
+    final IconData iconData = isSuccess 
+        ? Icons.check_circle_rounded 
+        : Icons.cancel_rounded;
+    final String title = isSuccess ? 'Verifikasi Berhasil!' : 'Verifikasi Gagal';
 
     return Center(
       child: SingleChildScrollView(
@@ -581,13 +598,13 @@ class _EkycPageState extends State<EkycPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  isSuccess ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                  color: isSuccess ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.error,
+                  iconData,
+                  color: iconColor,
                   size: 72,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isSuccess ? 'Verifikasi Berhasil!' : 'Verifikasi Gagal',
+                  title,
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
@@ -603,8 +620,8 @@ class _EkycPageState extends State<EkycPage> {
 
                 _buildResultItem('NIK', result.nik ?? '-'),
                 _buildResultItem('Nama', result.nama ?? '-'),
-                _buildResultItem('Skor Kemiripan', '${result.similarityScore ?? 0.0}%'),
-                _buildResultItem('Skor Liveness', '${result.livenessScore ?? 0.0}%'),
+                if (result.similarityScore != null)
+                  _buildResultItem('Skor Kemiripan', '${result.similarityScore}%'),
 
                 const SizedBox(height: 24),
                 const Divider(),
@@ -672,6 +689,64 @@ class _EkycPageState extends State<EkycPage> {
                       ),
                     ],
                   ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingScreen(BuildContext context, String tusUploadId) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.hourglass_empty_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 72,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Verifikasi Sedang Diproses',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Data Anda telah berhasil diunggah. Silakan klik tombol di bawah untuk memeriksa status verifikasi secara manual.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text(
+                      'Refresh Status',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    onPressed: () {
+                      context.read<EkycBloc>().add(RefreshVerificationStatus(tusUploadId));
+                    },
+                  ),
+                ),
               ],
             ),
           ),

@@ -165,7 +165,7 @@ void main() {
       nik: '3273012345678901',
       nama: 'RIZKY NURHIDAYAT',
       similarityScore: 92.0,
-      livenessScore: 95.0,
+      // livenessScore: 95.0,
     ));
 
     when(() => mockEkycBloc.state).thenReturn(state);
@@ -185,7 +185,7 @@ void main() {
       nik: '3273012345678901',
       nama: 'RIZKY NURHIDAYAT',
       similarityScore: 40.0,
-      livenessScore: 90.0,
+      // livenessScore: 90.0,
     ));
 
     when(() => mockEkycBloc.state).thenReturn(state);

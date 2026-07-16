@@ -36,4 +36,14 @@ class EkycRepositoryImpl implements EkycRepository {
       return Left(ServerFailure('Gagal melakukan verifikasi: ${e.toString()}'));
     }
   }
+
+  @override
+  Future<Either<Failure, EkycVerificationEntity>> checkEkycStatus(String tusUploadId) async {
+    try {
+      final result = await remoteDataSource.checkEkycStatus(tusUploadId);
+      return Right(result);
+    } catch (e) {
+      return Left(ServerFailure('Gagal mengecek status verifikasi: ${e.toString()}'));
+    }
+  }
 }

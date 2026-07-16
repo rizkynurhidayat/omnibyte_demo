@@ -74,6 +74,15 @@ class RestoreState extends EkycEvent {
 
 class SubmitVerification extends EkycEvent {}
 
+class RefreshVerificationStatus extends EkycEvent {
+  final String tusUploadId;
+
+  const RefreshVerificationStatus(this.tusUploadId);
+
+  @override
+  List<Object?> get props => [tusUploadId];
+}
+
 class SetFailure extends EkycEvent {
   final String errorMessage;
 

@@ -4,20 +4,26 @@ class EkycVerificationModel extends EkycVerificationEntity {
   const EkycVerificationModel({
     required super.status,
     required super.message,
+    super.tusUploadId,
     super.nik,
     super.nama,
     super.similarityScore,
-    super.livenessScore,
   });
 
   factory EkycVerificationModel.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>?;
+    
+    // Status depends on data['status']. Typical values: 'Completed', 'Processing', 'Failed'.
+    final statusString = data?['status']?.toString().toLowerCase() ?? json['status']?.toString().toLowerCase() ?? 'unknown';
+    final reasoning = data?['reasoning']?.toString() ?? json['message']?.toString() ?? '';
+
     return EkycVerificationModel(
-      status: json['status'] ?? 'unknown',
-      message: json['message'] ?? '',
-      nik: json['data']?['nik'],
-      nama: json['data']?['nama'],
-      similarityScore: (json['data']?['similarity_score'] as num?)?.toDouble(),
-      livenessScore: (json['data']?['liveness_score'] as num?)?.toDouble(),
+      status: statusString,
+      message: reasoning,
+      tusUploadId: json['tus_upload_id'],
+      nik: data?['nik'],
+      nama: data?['nama'],
+      similarityScore: (data?['similarity'] as num?)?.toDouble(),
     );
   }
 
@@ -25,11 +31,11 @@ class EkycVerificationModel extends EkycVerificationEntity {
     return {
       'status': status,
       'message': message,
+      'tus_upload_id': tusUploadId,
       'data': {
         'nik': nik,
         'nama': nama,
-        'similarity_score': similarityScore,
-        'liveness_score': livenessScore,
+        'similarity': similarityScore,
       }
     };
   }

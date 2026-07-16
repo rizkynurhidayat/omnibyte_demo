@@ -13,4 +13,6 @@ abstract class EkycRepository {
     required String nik,
     required String name,
   });
+
+  Future<Either<Failure, EkycVerificationEntity>> checkEkycStatus(String tusUploadId);
 }
