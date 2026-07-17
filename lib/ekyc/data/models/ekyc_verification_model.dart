@@ -8,6 +8,7 @@ class EkycVerificationModel extends EkycVerificationEntity {
     super.nik,
     super.nama,
     super.similarityScore,
+    super.verificationResult,
   });
 
   factory EkycVerificationModel.fromJson(Map<String, dynamic> json) {
@@ -24,6 +25,7 @@ class EkycVerificationModel extends EkycVerificationEntity {
       nik: data?['nik'],
       nama: data?['nama'],
       similarityScore: (data?['similarity'] as num?)?.toDouble(),
+      verificationResult: data?['verification_result']?.toString(),
     );
   }
 
@@ -36,6 +38,7 @@ class EkycVerificationModel extends EkycVerificationEntity {
         'nik': nik,
         'nama': nama,
         'similarity': similarityScore,
+        'verification_result': verificationResult,
       }
     };
   }

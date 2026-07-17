@@ -567,10 +567,15 @@ class _EkycPageState extends State<EkycPage> {
   Widget _buildSuccessScreen(BuildContext context, EkycSuccessState state) {
     final result = state.verificationResult;
     final statusLower = result.status.toLowerCase();
+    final verificationLower = result.verificationResult?.toLowerCase();
     
-    final isSuccess = statusLower == 'completed';
-    final isFailed = statusLower == 'failed';
+    // Status is 'pending' or 'processing' before the verification is actually done.
     final isPending = statusLower == 'pending' || statusLower == 'processing';
+
+    // Once completed, we look at verificationResult to determine success.
+    // Assuming backend returns 'Auto Approved' or 'Approved' on success.
+    final isSuccess = statusLower == 'completed' && (verificationLower == 'auto approved' || verificationLower == 'approved');
+    final isFailed = statusLower == 'failed' || (statusLower == 'completed' && verificationLower == 'rejected');
 
     if (isPending && result.tusUploadId != null) {
       return _buildPendingScreen(context, result.tusUploadId!);

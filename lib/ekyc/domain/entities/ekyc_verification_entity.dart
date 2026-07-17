@@ -7,6 +7,7 @@ class EkycVerificationEntity extends Equatable {
   final String? nik;
   final String? nama;
   final double? similarityScore;
+  final String? verificationResult;
 
   const EkycVerificationEntity({
     required this.status,
@@ -15,6 +16,7 @@ class EkycVerificationEntity extends Equatable {
     this.nik,
     this.nama,
     this.similarityScore,
+    this.verificationResult,
   });
 
   @override
@@ -25,5 +27,6 @@ class EkycVerificationEntity extends Equatable {
         nik,
         nama,
         similarityScore,
+        verificationResult,
       ];
 }

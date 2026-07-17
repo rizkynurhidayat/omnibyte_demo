@@ -116,6 +116,7 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
         nik: nik,
         nama: name,
         similarityScore: 92.4,
+        verificationResult: 'Auto Approved',
       );
     }
   }

@@ -40,6 +40,56 @@ class ImageUtils {
     }
   }
 
+  /// Crops the KTP card area from the full camera frame.
+  static Future<File> cropKtpCard(String ktpImagePath) async {
+    if (ktpImagePath.startsWith('simulated_')) return File(ktpImagePath);
+    final resultPath = await compute(_cropKtpCardAsync, ktpImagePath);
+    return File(resultPath);
+  }
+
+  static String _cropKtpCardAsync(String ktpImagePath) {
+    if (ktpImagePath.startsWith('simulated_')) return ktpImagePath;
+    final file = File(ktpImagePath);
+    if (!file.existsSync()) throw Exception("KTP image file not found");
+    final bytes = file.readAsBytesSync();
+    var image = img.decodeImage(bytes);
+    if (image == null) throw Exception("Failed to decode KTP image");
+    
+    // Bake EXIF orientation so pixels are rotated correctly
+    image = img.bakeOrientation(image);
+
+    final imgWidth = image.width;
+    final imgHeight = image.height;
+
+    // Based on KtpCutoutPainter: width = 85%, aspect ratio = 1.586
+    final cropW = (imgWidth * 0.85).toInt();
+    final cropH = (cropW / 1.586).toInt();
+
+    // Center X
+    final cropX = ((imgWidth - cropW) / 2).toInt().clamp(0, imgWidth - 1);
+    
+    // Center Y, shifted up slightly to match the -20 logical pixels in painter (~2.5% of height)
+    final cropY = ((imgHeight - cropH) / 2 - (imgHeight * 0.025)).toInt().clamp(0, imgHeight - 1);
+
+    final finalCropW = cropW.clamp(1, imgWidth - cropX);
+    final finalCropH = cropH.clamp(1, imgHeight - cropY);
+
+    final croppedImage = img.copyCrop(
+      image,
+      x: cropX,
+      y: cropY,
+      width: finalCropW,
+      height: finalCropH,
+    );
+
+    final extension = ktpImagePath.toLowerCase().endsWith('.png') ? '.png' : '.jpg';
+    final croppedPath = ktpImagePath.replaceAll(extension, '_card$extension');
+    final croppedFile = File(croppedPath);
+    croppedFile.writeAsBytesSync(img.encodeJpg(croppedImage));
+
+    return croppedPath;
+  }
+
   /// Crops the face area from a horizontal KTP image based on the standard card layout.
   /// (Typically the photo resides on the right side: X ~ 60-95%, Y ~ 15-85%).
   static Future<File> cropKtpFace(String ktpImagePath) async {
@@ -53,8 +103,11 @@ class ImageUtils {
     final file = File(ktpImagePath);
     if (!file.existsSync()) throw Exception("KTP image file not found");
     final bytes = file.readAsBytesSync();
-    final image = img.decodeImage(bytes);
+    var image = img.decodeImage(bytes);
     if (image == null) throw Exception("Failed to decode KTP image");
+    
+    // Bake EXIF orientation so pixels are rotated correctly
+    image = img.bakeOrientation(image);
 
     final width = image.width;
     final height = image.height;
@@ -107,8 +160,11 @@ class ImageUtils {
     final file = File(params.imagePath);
     if (!file.existsSync()) throw Exception("Image file not found for face cropping");
     final bytes = file.readAsBytesSync();
-    final image = img.decodeImage(bytes);
+    var image = img.decodeImage(bytes);
     if (image == null) throw Exception("Failed to decode image for face cropping");
+    
+    // Bake EXIF orientation
+    image = img.bakeOrientation(image);
 
     final imgWidth = image.width;
     final imgHeight = image.height;
@@ -159,7 +215,9 @@ class ImageUtils {
     final bytes = file.readAsBytesSync();
     final decodedImage = img.decodeImage(bytes);
     if (decodedImage == null) throw Exception("Failed to decode image for compression");
-    var activeImage = decodedImage;
+    
+    // Bake EXIF orientation
+    var activeImage = img.bakeOrientation(decodedImage);
 
     int quality = 85;
     List<int> compressedBytes;

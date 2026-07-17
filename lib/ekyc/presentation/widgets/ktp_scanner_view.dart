@@ -86,10 +86,13 @@ class _KtpScannerViewState extends State<KtpScannerView> {
 
     try {
       // 1. Take picture
-      final XFile file = await _cameraController!.takePicture();
+      final XFile rawFile = await _cameraController!.takePicture();
 
-      // 2. Perform brightness check (Too dark check)
-      final isDark = await ImageUtils.isImageTooDark(file.path, threshold: 45.0);
+      // 1.5 Crop the KTP card area from the full camera frame
+      final croppedCardFile = await ImageUtils.cropKtpCard(rawFile.path);
+
+      // 2. Perform brightness check (Too dark check) on the cropped card
+      final isDark = await ImageUtils.isImageTooDark(croppedCardFile.path, threshold: 45.0);
       if (isDark) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -106,8 +109,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         return;
       }
 
-      // 3. Process OCR to find NIK & Name
-      final inputImage = InputImage.fromFilePath(file.path);
+      // 3. Process OCR to find NIK & Name on the cropped card
+      final inputImage = InputImage.fromFilePath(croppedCardFile.path);
       final recognizedText = await _textRecognizer.processImage(inputImage);
       
       final rawText = recognizedText.text;
@@ -117,8 +120,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       final finalNik = nik ?? "3273123456780001";
       final name = _extractName(recognizedText, finalNik);
 
-      // 5. Crop face area from KTP image
-      final croppedFaceFile = await ImageUtils.cropKtpFace(file.path);
+      // 5. Crop face area from KTP image (now based on the cropped card)
+      final croppedFaceFile = await ImageUtils.cropKtpFace(croppedCardFile.path);
 
       // Collect all lines
       final linesList = <String>[];
@@ -129,7 +132,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       }
 
       // Save OCR details as ocr.json with full parsed data, raw text, and individual lines list
-      final ocrJsonPath = file.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
+      final ocrJsonPath = croppedCardFile.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
       final ocrMap = {
         'nik': finalNik,
         'name': name,
@@ -139,7 +142,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       await File(ocrJsonPath).writeAsString(jsonEncode(ocrMap));
 
       // 6. Callback success
-      widget.onCaptured(file.path, croppedFaceFile.path, ocrJsonPath, finalNik, name);
+      widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalNik, name);
     } catch (e) {
       debugPrint("KTP Capture error: $e");
       if (mounted) {
