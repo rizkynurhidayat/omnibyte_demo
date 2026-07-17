@@ -207,20 +207,16 @@ class ImageUtils {
     final file = File(params.imagePath);
     if (!file.existsSync()) throw Exception("Image file not found for compression");
     
-    int size = file.lengthSync();
-    if (size <= params.maxSizeBytes) {
-      return params.imagePath; // No compression needed
-    }
-
     final bytes = file.readAsBytesSync();
     final decodedImage = img.decodeImage(bytes);
     if (decodedImage == null) throw Exception("Failed to decode image for compression");
     
-    // Bake EXIF orientation
+    // Always bake EXIF orientation so the final image has correct pixel rotation
     var activeImage = img.bakeOrientation(decodedImage);
 
     int quality = 85;
     List<int> compressedBytes;
+    int size;
     
     do {
       compressedBytes = img.encodeJpg(activeImage, quality: quality);
