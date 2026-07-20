@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import '../models/verification_model.dart';
 
@@ -13,19 +14,43 @@ class ScannerRemoteDataSourceImpl implements ScannerRemoteDataSource {
   @override
   Future<VerificationModel> submitSelfieWithKtp(String imagePath) async {
     // -------------------------------------------------------------
-    // CONTOH KODE ASLI UNTUK INTEGRASI API (Commented out untuk saat ini)
+    // CONTOH KODE ASLI UNTUK INTEGRASI API DENGAN TUS
     // -------------------------------------------------------------
     /*
     try {
+      final xFile = XFile(imagePath);
       final fileName = imagePath.split('/').last;
-      final formData = FormData.fromMap({
-        'image': await MultipartFile.fromFile(imagePath, filename: fileName),
-        // 'other_param': 'value', // TODO: Sesuaikan dengan kebutuhan body request API
-      });
+      final extension = fileName.split('.').last.toLowerCase();
+      final fileType = 'application/$extension';
+
+      final client = TusClient(
+        url: 'https://tus-upload.coworker.id/files/',
+        file: xFile,
+        chunkSize: 1024 * 1024,
+        metadata: {
+          'file_name': fileName,
+          'filetype': fileType,
+        },
+      );
+
+      final completer = Completer<String>();
+
+      client.startUpload(
+        onComplete: (response) {
+          completer.complete(client.uploadUrl.toString());
+        },
+        onError: (e) {
+          completer.completeError(e.message);
+        },
+      );
+
+      final uploadUrl = await completer.future;
 
       final response = await dio.post(
         '/verify/selfie-ktp', // TODO: Sesuaikan path endpoint API
-        data: formData,
+        data: {
+          'image_url': uploadUrl,
+        },
       );
 
       if (response.statusCode == 200) {

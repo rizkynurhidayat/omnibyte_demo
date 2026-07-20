@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/pages/home_page.dart';
+import 'injection_container.dart' as di;
 // import 'package:firebase_core/firebase_core.dart';
 // import 'firebase_options.dart'; // Jalankan 'flutterfire configure' untuk generate file ini
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await di.initDependencies();
   
   // Setup Firebase (Uncomment setelah mengonfigurasi Firebase via Flutterfire CLI)
   /*
