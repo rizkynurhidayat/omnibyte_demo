@@ -36,7 +36,9 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
 
   void _onKtpCaptured(KtpCaptured event, Emitter<EkycState> emit) {
     final currentState = state;
-    final docType = currentState is EkycStepKtpActive ? currentState.documentType : DocumentType.ktp;
+    final docType = (currentState is EkycStepKtpActive && currentState.documentType != DocumentType.auto)
+        ? currentState.documentType
+        : event.detectedDocumentType;
     emit(EkycStepKtpCompleted(
       documentType: docType,
       ktpPath: event.ktpPath,

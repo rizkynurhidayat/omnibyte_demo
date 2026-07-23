@@ -25,6 +25,7 @@ class KtpCaptured extends EkycEvent {
   final String ocrJsonPath;
   final String nik;
   final String name;
+  final DocumentType detectedDocumentType;
 
   const KtpCaptured({
     required this.ktpPath,
@@ -32,10 +33,11 @@ class KtpCaptured extends EkycEvent {
     required this.ocrJsonPath,
     required this.nik,
     required this.name,
+    this.detectedDocumentType = DocumentType.ktp,
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name];
+  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name, detectedDocumentType];
 }
 
 class StartSelfieKtpScan extends EkycEvent {

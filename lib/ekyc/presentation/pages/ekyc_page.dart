@@ -237,13 +237,14 @@ class _EkycPageState extends State<EkycPage> {
     if (state is EkycStepKtpActive) {
       return KtpScannerView(
         documentType: state.documentType,
-        onCaptured: (ktpPath, croppedFacePath, ocrJsonPath, nik, name) {
+        onCaptured: (ktpPath, croppedFacePath, ocrJsonPath, nik, name, detectedDocType) {
           context.read<EkycBloc>().add(KtpCaptured(
                 ktpPath: ktpPath,
                 croppedFacePath: croppedFacePath,
                 ocrJsonPath: ocrJsonPath,
                 nik: nik,
                 name: name,
+                detectedDocumentType: detectedDocType,
               ));
         },
       );
@@ -291,9 +292,37 @@ class _EkycPageState extends State<EkycPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Verifikasi Hasil Pemindaian $docLabel',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Verifikasi Hasil Pemindaian',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withAlpha(30),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withAlpha(100)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome, size: 14, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      docLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           const Text(

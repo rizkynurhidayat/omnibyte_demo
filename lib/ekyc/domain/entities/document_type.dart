@@ -1,4 +1,4 @@
-enum DocumentType { ktp, sim, passport }
+enum DocumentType { ktp, sim, passport, auto }
 
 extension DocumentTypeExtension on DocumentType {
   String get label {
@@ -9,6 +9,8 @@ extension DocumentTypeExtension on DocumentType {
         return 'SIM';
       case DocumentType.passport:
         return 'Passport';
+      case DocumentType.auto:
+        return 'Auto Detect';
     }
   }
 
@@ -20,6 +22,9 @@ extension DocumentTypeExtension on DocumentType {
         return 'sim';
       case DocumentType.passport:
         return 'pasport'; // requested name: pasport
+      case DocumentType.auto:
+        return 'auto';
     }
   }
 }
+

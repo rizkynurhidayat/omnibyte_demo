@@ -12,7 +12,7 @@ import '../../domain/entities/document_type.dart';
 
 class KtpScannerView extends StatefulWidget {
   final DocumentType documentType;
-  final Function(String ktpPath, String croppedFacePath, String ocrJsonPath, String nik, String name) onCaptured;
+  final Function(String ktpPath, String croppedFacePath, String ocrJsonPath, String nik, String name, DocumentType detectedDocType) onCaptured;
 
   const KtpScannerView({
     super.key,
@@ -126,27 +126,43 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       final rawText = recognizedText.text;
       debugPrint("OCR RAW TEXT: $rawText");
 
+      // 4. Detect document type explicitly from raw OCR text
+      final detectedDocType = OcrParserUtil.detectDocumentType(rawText, hint: widget.documentType);
+
       final ocrResult = OcrParserUtil.parse(
         rawText,
         recognizedText: recognizedText,
-        hint: widget.documentType,
+        hint: detectedDocType,
       );
       final finalDocId = ocrResult.documentNumber;
       final name = ocrResult.fullName;
 
-      // 5. Crop face area from KTP image (now based on the cropped card)
-      final isFaceOnLeft = widget.documentType != DocumentType.ktp;
+      // 5. Crop face area from card image (based on detected document type)
+      final isFaceOnLeft = (detectedDocType != DocumentType.ktp);
       final croppedFaceFile = await ImageUtils.cropKtpFace(
         croppedCardFile.path,
         isFaceOnLeft: isFaceOnLeft,
       );
 
+      // Notify user about detected document type & face crop side
+      if (mounted) {
+        // final faceSide = isFaceOnLeft ? 'KIRI' : 'KANAN';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Terdeteksi: ${detectedDocType.label}'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
       // Save OCR details as ocr.json using OcrExtractionResult.toJson()
       final ocrJsonPath = croppedCardFile.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
       await File(ocrJsonPath).writeAsString(jsonEncode(ocrResult.toJson()));
 
-      // 6. Callback success
-      widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalDocId, name);
+      // 6. Callback success with detected document type
+      widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalDocId, name, detectedDocType);
     } catch (e) {
       debugPrint("$docLabel Capture error: $e");
       if (mounted) {
@@ -181,7 +197,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       dummyFacePath,
       dummyOcrJsonPath,
       '3273012345678901',
-      'RIZKY NURHIDAYAT',
+      'RIZKY NURHIDAYAT', 
+      widget.documentType
     );
     
     if (mounted) {
@@ -247,7 +264,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
             child: Column(
               children: [
                 Text(
-                  'FOTO ${widget.documentType.label} ANDA',
+                  // 'FOTO ${widget.documentType.label} ANDA',
+                  'FOTO Kartu Identitas ANDA',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -257,7 +275,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Posisikan ${widget.documentType.label} pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
+                  // 'Posisikan ${widget.documentType.label} pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
+                  'Posisikan Kartu Identitas pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white70,

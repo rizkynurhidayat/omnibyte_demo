@@ -84,4 +84,39 @@ A
       expect(result.mrzDetected, false);
     });
   });
+
+  group('OcrParserUtil detectDocumentType', () {
+    test('should detect KTP from KARTU TANDA PENDUDUK or NIK', () {
+      expect(OcrParserUtil.detectDocumentType('KARTU TANDA PENDUDUK PROVINSI DKI JAKARTA'), DocumentType.ktp);
+      expect(OcrParserUtil.detectDocumentType('NIK: 3171012345670001'), DocumentType.ktp);
+    });
+
+    test('should detect SIM from SURAT IZIN MENGEMUDI or POLRI', () {
+      expect(OcrParserUtil.detectDocumentType('SURAT IZIN MENGEMUDI A'), DocumentType.sim);
+      expect(OcrParserUtil.detectDocumentType('POLRI POLDA METRO JAYA'), DocumentType.sim);
+    });
+
+    test('should detect SIM even if text contains NIK string', () {
+      final simWithNikText = 'SURAT IZIN MENGEMUDI\nPOLRI\nNIK: 3171012345670001\nNama: RIZKY';
+      expect(OcrParserUtil.detectDocumentType(simWithNikText), DocumentType.sim);
+    });
+
+    test('should detect Passport from PASPOR, PASSPORT, or MRZ format', () {
+      expect(OcrParserUtil.detectDocumentType('PASPOR REPUBLIK INDONESIA'), DocumentType.passport);
+      expect(OcrParserUtil.detectDocumentType('PASSPORT OF INDONESIA'), DocumentType.passport);
+      expect(OcrParserUtil.detectDocumentType('P<IDNSURNAME<<GIVEN<<<<<<<<<<<<<<<<<<<<<<<<<'), DocumentType.passport);
+    });
+
+    test('should auto parse KTP, SIM, Passport with DocumentType.auto hint', () {
+      final ktpRes = OcrParserUtil.parse('NIK 3273012345678901 Nama: Rizky', hint: DocumentType.auto);
+      expect(ktpRes.documentType, 'KTP');
+
+      final simRes = OcrParserUtil.parse('SURAT IZIN MENGEMUDI POLRI 12345', hint: DocumentType.auto);
+      expect(simRes.documentType, 'SIM');
+
+      final passRes = OcrParserUtil.parse('PASSPORT REPUBLIC OF INDONESIA\nP<IDN...', hint: DocumentType.auto);
+      expect(passRes.documentType, 'Passport');
+    });
+  });
 }
+

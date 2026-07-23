@@ -4,6 +4,47 @@ import 'package:omnibyte_demo/core/models/ocr_extraction_result.dart';
 import 'dart:ui';
 
 class OcrParserUtil {
+  /// Detects DocumentType (KTP, SIM, Passport) from raw OCR string based on predefined keywords and MRZ pattern.
+  static DocumentType detectDocumentType(String rawText, {DocumentType? hint}) {
+    final cleanUpper = rawText.toUpperCase();
+
+    // 1. Passport: Check for string 'PASPOR', 'PASSPORT', or MRZ format ('<<<<<' or 'P<')
+    final hasMrz = cleanUpper.contains('<<<<') || 
+                   cleanUpper.contains('P<') || 
+                   RegExp(r'[A-Z0-9<]{30,}').hasMatch(cleanUpper);
+    if (cleanUpper.contains("PASPOR") || cleanUpper.contains("PASSPORT") || hasMrz) {
+      return DocumentType.passport;
+    }
+
+    // 2. SIM: Check for string 'SURAT IZIN MENGEMUDI', 'POLRI', 'POLDA', 'DRIVING LICENSE', or standalone 'SIM'
+    final isSimKeyword = cleanUpper.contains("SURAT IZIN MENGEMUDI") || 
+                         cleanUpper.contains("SURAT IZIN") ||
+                         cleanUpper.contains("POLRI") || 
+                         cleanUpper.contains("POLDA") ||
+                         cleanUpper.contains("DRIVING LICENSE") ||
+                         RegExp(r'\bSIM\b').hasMatch(cleanUpper);
+    if (isSimKeyword) {
+      return DocumentType.sim;
+    }
+
+    // 3. KTP: Check for string 'KARTU TANDA PENDUDUK', 'PROVINSI', 'KABUPATEN', 'KOTA', or 'NIK'
+    final isKtpKeyword = cleanUpper.contains("KARTU TANDA PENDUDUK") || 
+                         cleanUpper.contains("PENDUDUK") ||
+                         cleanUpper.contains("PROVINSI") ||
+                         cleanUpper.contains("KABUPATEN") ||
+                         cleanUpper.contains("NIK");
+    if (isKtpKeyword) {
+      return DocumentType.ktp;
+    }
+
+    // Fallback: If hint is specific (not null and not auto), return hint. Otherwise default to DocumentType.ktp
+    if (hint != null && hint != DocumentType.auto) {
+      return hint;
+    }
+
+    return DocumentType.ktp;
+  }
+
   /// Main entry point to parse raw OCR text and optional geometry/hints into a structured result.
   static OcrExtractionResult parse(String rawText, {RecognizedText? recognizedText, DocumentType? hint}) {
     final cleanRaw = rawText.trim();
@@ -139,16 +180,12 @@ class OcrParserUtil {
   static OcrExtractionResult _parseLocalDocument(String rawText, RecognizedText? recognizedText, DocumentType? hint) {
     final lines = rawText.split('\n');
     
-    // Determine document type
-    String docType = "Unknown";
-    final textUpper = rawText.toUpperCase();
-    if (hint == DocumentType.ktp || textUpper.contains("KARTU TANDA PENDUDUK") || textUpper.contains("NIK")) {
-      docType = "KTP";
-    } else if (hint == DocumentType.sim || textUpper.contains("SURAT IZIN MENGEMUDI") || textUpper.contains("SIM")) {
-      docType = "SIM";
-    } else if (hint == DocumentType.passport) {
-      docType = "Passport";
-    }
+    // Determine document type via auto detection logic
+    final detectedType = detectDocumentType(rawText, hint: hint);
+    String docType = detectedType == DocumentType.ktp 
+        ? "KTP" 
+        : (detectedType == DocumentType.sim ? "SIM" : "Passport");
+
 
     // 1. Extract Document Number & NIK
     String docNumber = "";

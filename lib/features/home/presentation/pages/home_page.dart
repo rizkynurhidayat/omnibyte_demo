@@ -119,11 +119,67 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 16),
                 
                 // Navigation menu cards
+                // _buildMenuCard(
+                //   context,
+                //   title: 'e-KYC KTP',
+                //   subtitle: 'Pindai KTP & verifikasi identitas wajah',
+                //   icon: Icons.credit_card,
+                //   color: theme.colorScheme.primary,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) => BlocProvider(
+                //           create: (context) => sl<EkycBloc>(),
+                //           child: const EkycPage(documentType: DocumentType.ktp),
+                //         ),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // const SizedBox(height: 16),
+                // _buildMenuCard(
+                //   context,
+                //   title: 'e-KYC SIM',
+                //   subtitle: 'Pindai SIM & verifikasi identitas wajah',
+                //   icon: Icons.badge_outlined,
+                //   color: theme.colorScheme.primary,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) => BlocProvider(
+                //           create: (context) => sl<EkycBloc>(),
+                //           child: const EkycPage(documentType: DocumentType.sim),
+                //         ),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // const SizedBox(height: 16),
+                // _buildMenuCard(
+                //   context,
+                //   title: 'e-KYC Passport',
+                //   subtitle: 'Pindai Passport & verifikasi identitas wajah',
+                //   icon: Icons.flight_takeoff,
+                //   color: theme.colorScheme.primary,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) => BlocProvider(
+                //           create: (context) => sl<EkycBloc>(),
+                //           child: const EkycPage(documentType: DocumentType.passport),
+                //         ),
+                //       ),
+                //     );
+                //   },
+                // ),
                 _buildMenuCard(
                   context,
-                  title: 'e-KYC KTP',
-                  subtitle: 'Pindai KTP & verifikasi identitas wajah',
-                  icon: Icons.credit_card,
+                  title: 'e-KYC Auto Detect',
+                  subtitle: 'Auto deteksi KTP, SIM, atau Passport via OCR',
+                  icon: Icons.document_scanner,
                   color: theme.colorScheme.primary,
                   onTap: () {
                     Navigator.push(
@@ -131,45 +187,7 @@ class HomePage extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => BlocProvider(
                           create: (context) => sl<EkycBloc>(),
-                          child: const EkycPage(documentType: DocumentType.ktp),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildMenuCard(
-                  context,
-                  title: 'e-KYC SIM',
-                  subtitle: 'Pindai SIM & verifikasi identitas wajah',
-                  icon: Icons.badge_outlined,
-                  color: theme.colorScheme.primary,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => BlocProvider(
-                          create: (context) => sl<EkycBloc>(),
-                          child: const EkycPage(documentType: DocumentType.sim),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildMenuCard(
-                  context,
-                  title: 'e-KYC Passport',
-                  subtitle: 'Pindai Passport & verifikasi identitas wajah',
-                  icon: Icons.flight_takeoff,
-                  color: theme.colorScheme.primary,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => BlocProvider(
-                          create: (context) => sl<EkycBloc>(),
-                          child: const EkycPage(documentType: DocumentType.passport),
+                          child: const EkycPage(documentType: DocumentType.auto),
                         ),
                       ),
                     );
