@@ -89,9 +89,6 @@ class OcrParserUtil {
         line2 = td3Lines[1];
       }
     }
-
-    final hasMrz = line1.startsWith('P') || line1.contains('<');
-    
     // Line 1 details
     // Format: P<IDNSURNAME<<GIVEN<NAME<<<<<<<<<<<<<<<<<<<<
     final docType = "Passport";

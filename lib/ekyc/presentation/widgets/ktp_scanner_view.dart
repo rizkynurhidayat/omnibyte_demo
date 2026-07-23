@@ -95,7 +95,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     final docLabel = widget.documentType.label;
 
     try {
-      // 1. Take picture
+      // 1. Take high-resolution picture
       final XFile rawFile = await _cameraController!.takePicture();
 
       // 1.5 Crop the KTP card area from the full camera frame
@@ -119,14 +119,32 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         return;
       }
 
-      // 3. Process OCR to find Document ID & Name on the cropped card
+      // 3. Process OCR on the cropped card image file
       final inputImage = InputImage.fromFilePath(croppedCardFile.path);
       final recognizedText = await _textRecognizer.processImage(inputImage);
       
-      final rawText = recognizedText.text;
+      final rawText = recognizedText.text.trim();
       debugPrint("OCR RAW TEXT: $rawText");
 
-      // 4. Detect document type explicitly from raw OCR text
+      // 4. Post-Capture Frame Validation: Verify that an ID card is actually inside the frame
+      if (rawText.isEmpty || recognizedText.blocks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kartu identitas tidak terdeteksi di dalam frame! Harap posisikan kartu identitas di dalam bingkai.'),
+              backgroundColor: Colors.amber,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // 5. Detect document type explicitly from raw OCR text
       final detectedDocType = OcrParserUtil.detectDocumentType(rawText, hint: widget.documentType);
 
       final ocrResult = OcrParserUtil.parse(
@@ -137,16 +155,15 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       final finalDocId = ocrResult.documentNumber;
       final name = ocrResult.fullName;
 
-      // 5. Crop face area from card image (based on detected document type)
+      // 6. Crop face area from card image (based on detected document type: Right for KTP, Left for SIM & Passport)
       final isFaceOnLeft = (detectedDocType != DocumentType.ktp);
       final croppedFaceFile = await ImageUtils.cropKtpFace(
         croppedCardFile.path,
         isFaceOnLeft: isFaceOnLeft,
       );
 
-      // Notify user about detected document type & face crop side
+      // Notify user about detected document type
       if (mounted) {
-        // final faceSide = isFaceOnLeft ? 'KIRI' : 'KANAN';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Terdeteksi: ${detectedDocType.label}'),
@@ -161,7 +178,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       final ocrJsonPath = croppedCardFile.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
       await File(ocrJsonPath).writeAsString(jsonEncode(ocrResult.toJson()));
 
-      // 6. Callback success with detected document type
+      // 7. Callback success with detected document type
       widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalDocId, name, detectedDocType);
     } catch (e) {
       debugPrint("$docLabel Capture error: $e");
@@ -178,7 +195,6 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       }
     }
   }
-
 
   // ignore: unused_element
   void _simulateKtp() async {
@@ -217,6 +233,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
 
   @override
   Widget build(BuildContext context) {
+    final frameColor = Theme.of(context).colorScheme.primary;
+
     return Stack(
       children: [
         // Camera Preview or Loading
@@ -241,11 +259,14 @@ class _KtpScannerViewState extends State<KtpScannerView> {
               ),
             ),
           ),
-
-        // Semi-transparent overlay with card cutout
+        // White overlay with card cutout
         Positioned.fill(
           child: CustomPaint(
-            painter: KtpCutoutPainter(documentType: widget.documentType),
+            painter: KtpCutoutPainter(
+              documentType: widget.documentType,
+              borderColor: frameColor,
+              overlayColor: Colors.white,
+            ),
           ),
         ),
 
@@ -257,28 +278,37 @@ class _KtpScannerViewState extends State<KtpScannerView> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.black.withAlpha(180),
+              color: Colors.black.withAlpha(190),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: Colors.white24, width: 1.5),
             ),
-            child: Column(
+            child: const Column(
               children: [
-                Text(
-                  // 'FOTO ${widget.documentType.label} ANDA',
-                  'FOTO Kartu Identitas ANDA',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'FOTO KARTU IDENTITAS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 6),
                 Text(
-                  // 'Posisikan ${widget.documentType.label} pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
-                  'Posisikan Kartu Identitas pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
+                  'Posisikan kartu identitas pas di dalam bingkai.\nTekan tombol foto untuk memindai.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
                   ),
@@ -311,7 +341,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
             ),
           ),
 
-        // Shutter Button & Simulator Button
+        // Shutter Button
         if (!_isProcessing)
           Positioned(
             bottom: 40,
@@ -339,10 +369,10 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                         child: Container(
                           width: 72,
                           height: 72,
-                          decoration: BoxDecoration(
-                            color: _isCameraInitialized ? Colors.white : Colors.grey,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
                             shape: BoxShape.circle,
-                            boxShadow: const [
+                            boxShadow: [
                               BoxShadow(
                                 color: Colors.black38,
                                 blurRadius: 10,
@@ -352,7 +382,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                           ),
                           child: Icon(
                             Icons.camera_alt,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: frameColor,
                             size: 32,
                           ),
                         ),
@@ -371,7 +401,6 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                     ),
                   ],
                 ),
-                // Simulator button is hidden for production
               ],
             ),
           ),
@@ -382,12 +411,18 @@ class _KtpScannerViewState extends State<KtpScannerView> {
 
 class KtpCutoutPainter extends CustomPainter {
   final DocumentType documentType;
+  final Color borderColor;
+  final Color overlayColor;
 
-  KtpCutoutPainter({required this.documentType});
+  KtpCutoutPainter({
+    required this.documentType,
+    this.borderColor = Colors.white,
+    this.overlayColor = Colors.white,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.black.withAlpha(160);
+    final paint = Paint()..color = overlayColor;
 
     // KTP horizontal dimensions (standard aspect ratio 1.586)
     final width = size.width * 0.85;
@@ -402,12 +437,13 @@ class KtpCutoutPainter extends CustomPainter {
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
       ..addRRect(rrect);
+    path.fillType = PathFillType.evenOdd;
 
     canvas.drawPath(path, paint);
 
     // Draw border around cutout
     final borderPaint = Paint()
-      ..color = Colors.white
+      ..color = borderColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
     canvas.drawRRect(rrect, borderPaint);
@@ -424,17 +460,18 @@ class KtpCutoutPainter extends CustomPainter {
     final photoRRect = RRect.fromRectAndRadius(photoRect, const Radius.circular(8));
 
     final photoPaint = Paint()
-      ..color = Colors.white.withAlpha(100)
+      ..color = Colors.white.withAlpha(120)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..setStrokePattern([4, 4]); // Dashed border effect in CustomPaint:
+      ..strokeWidth = 1.5;
     
     canvas.drawRRect(photoRRect, photoPaint);
   }
 
   @override
   bool shouldRepaint(covariant KtpCutoutPainter oldDelegate) {
-    return oldDelegate.documentType != documentType;
+    return oldDelegate.documentType != documentType ||
+        oldDelegate.borderColor != borderColor ||
+        oldDelegate.overlayColor != overlayColor;
   }
 }
 
