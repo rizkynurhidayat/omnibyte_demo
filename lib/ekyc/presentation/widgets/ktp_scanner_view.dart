@@ -6,11 +6,19 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/permission_helper.dart';
+import '../../../core/utils/ocr_parser_util.dart';
+
+import '../../domain/entities/document_type.dart';
 
 class KtpScannerView extends StatefulWidget {
+  final DocumentType documentType;
   final Function(String ktpPath, String croppedFacePath, String ocrJsonPath, String nik, String name) onCaptured;
 
-  const KtpScannerView({super.key, required this.onCaptured});
+  const KtpScannerView({
+    super.key,
+    required this.documentType,
+    required this.onCaptured,
+  });
 
   @override
   State<KtpScannerView> createState() => _KtpScannerViewState();
@@ -77,12 +85,14 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     await _initCamera();
   }
 
-  Future<void> _captureKtp() async {
+  Future<void> _captureDocument() async {
     if (_isProcessing || _cameraController == null || !_isCameraInitialized) return;
 
     setState(() {
       _isProcessing = true;
     });
+
+    final docLabel = widget.documentType.label;
 
     try {
       // 1. Take picture
@@ -96,8 +106,8 @@ class _KtpScannerViewState extends State<KtpScannerView> {
       if (isDark) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Gambar KTP terlalu gelap! Pastikan ruangan cukup terang.'),
+            SnackBar(
+              content: Text('Gambar $docLabel terlalu gelap! Pastikan ruangan cukup terang.'),
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
             ),
@@ -109,45 +119,39 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         return;
       }
 
-      // 3. Process OCR to find NIK & Name on the cropped card
+      // 3. Process OCR to find Document ID & Name on the cropped card
       final inputImage = InputImage.fromFilePath(croppedCardFile.path);
       final recognizedText = await _textRecognizer.processImage(inputImage);
       
       final rawText = recognizedText.text;
       debugPrint("OCR RAW TEXT: $rawText");
 
-      final nik = _extractNik(recognizedText);
-      final finalNik = nik ?? "3273123456780001";
-      final name = _extractName(recognizedText, finalNik);
+      final ocrResult = OcrParserUtil.parse(
+        rawText,
+        recognizedText: recognizedText,
+        hint: widget.documentType,
+      );
+      final finalDocId = ocrResult.documentNumber;
+      final name = ocrResult.fullName;
 
       // 5. Crop face area from KTP image (now based on the cropped card)
-      final croppedFaceFile = await ImageUtils.cropKtpFace(croppedCardFile.path);
+      final isFaceOnLeft = widget.documentType != DocumentType.ktp;
+      final croppedFaceFile = await ImageUtils.cropKtpFace(
+        croppedCardFile.path,
+        isFaceOnLeft: isFaceOnLeft,
+      );
 
-      // Collect all lines
-      final linesList = <String>[];
-      for (final block in recognizedText.blocks) {
-        for (final line in block.lines) {
-          linesList.add(line.text);
-        }
-      }
-
-      // Save OCR details as ocr.json with full parsed data, raw text, and individual lines list
+      // Save OCR details as ocr.json using OcrExtractionResult.toJson()
       final ocrJsonPath = croppedCardFile.path.replaceAll(RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false), '_ocr.json');
-      final ocrMap = {
-        'nik': finalNik,
-        'name': name,
-        'raw_text': rawText,
-        'lines': linesList,
-      };
-      await File(ocrJsonPath).writeAsString(jsonEncode(ocrMap));
+      await File(ocrJsonPath).writeAsString(jsonEncode(ocrResult.toJson()));
 
       // 6. Callback success
-      widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalNik, name);
+      widget.onCaptured(croppedCardFile.path, croppedFaceFile.path, ocrJsonPath, finalDocId, name);
     } catch (e) {
-      debugPrint("KTP Capture error: $e");
+      debugPrint("$docLabel Capture error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saat memindai KTP: $e')),
+          SnackBar(content: Text('Error saat memindai $docLabel: $e')),
         );
       }
     } finally {
@@ -159,215 +163,6 @@ class _KtpScannerViewState extends State<KtpScannerView> {
     }
   }
 
-  String? _extractNik(RecognizedText recognizedText) {
-    // 1. Loop through blocks and lines to perform character corrections for NIK
-    for (final block in recognizedText.blocks) {
-      for (final line in block.lines) {
-        final text = line.text;
-        
-        // Match the reference repo OCR correction logic:
-        final corrected = text
-            .replaceAll(RegExp(r'[oO]'), '0')
-            .replaceAll(RegExp(r'[lIiI]'), '1')
-            .replaceAll('b', '6')
-            .replaceAll('B', '8')
-            .replaceAll('?', '7')
-            .replaceAll('s', '5')
-            .replaceAll('S', '5')
-            .replaceAll(' ', '')
-            .replaceAll(RegExp(r'\D'), ''); // Keep only digits
-
-        if (corrected.length == 16) {
-          return corrected;
-        }
-      }
-    }
-
-    // 2. Fallback: Split raw text by newline and check
-    final rawText = recognizedText.text;
-    final lines = rawText.split('\n');
-    for (final line in lines) {
-      final cleaned = line.replaceAll(RegExp(r'\D'), '');
-      if (cleaned.length == 16) {
-        return cleaned;
-      }
-    }
-
-    // 3. Secondary Fallback: look at the entire cleaned text without spaces/symbols
-    final superCleaned = rawText.replaceAll(RegExp(r'\D'), '');
-    final match = RegExp(r'\d{16}').firstMatch(superCleaned);
-    if (match != null) {
-      return match.group(0);
-    }
-
-    return null;
-  }
-
-  String _extractName(RecognizedText recognizedText, String? nik) {
-    final rawText = recognizedText.text;
-    final lines = rawText.split('\n');
-
-    // 1. Same-line extraction: Check if any line contains a variation of "nama" and a colon
-    for (final block in recognizedText.blocks) {
-      for (final line in block.lines) {
-        final lineText = line.text.toLowerCase();
-        if (lineText.contains('nama') || lineText.contains('nema') || lineText.contains('name')) {
-          if (line.text.contains(':')) {
-            final parts = line.text.split(':');
-            if (parts.length > 1) {
-              final candidate = parts[1].replaceAll(RegExp(r'^[\s\-:=]+'), '').trim();
-              if (candidate.length > 3 && !candidate.contains(RegExp(r'\d')) && !_isKtpLabel(candidate)) {
-                return _fixAsciiCharacters(candidate).toUpperCase();
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Geometric alignment extraction: Match to the right of "Nama" label bounding box
-    Rect? namaLabelRect;
-    
-    // Find "Nama" (or similar typo) element's bounding box
-    for (final block in recognizedText.blocks) {
-      for (final line in block.lines) {
-        for (final element in line.elements) {
-          final elementText = element.text.toLowerCase().trim();
-          if (elementText == 'nama' || elementText == 'nema' || elementText == 'name') {
-            namaLabelRect = element.boundingBox;
-            break;
-          }
-        }
-        if (namaLabelRect != null) break;
-      }
-      if (namaLabelRect != null) break;
-    }
-
-    // If still null, search on line-level bounding box
-    if (namaLabelRect == null) {
-      for (final block in recognizedText.blocks) {
-        for (final line in block.lines) {
-          final lineText = line.text.toLowerCase().trim();
-          if (lineText.startsWith('nama') || lineText.startsWith('nema') || lineText.startsWith('name')) {
-            namaLabelRect = line.boundingBox;
-            break;
-          }
-        }
-        if (namaLabelRect != null) break;
-      }
-    }
-
-    // If label bounding box is found, look for candidate lines horizontally aligned to the right of it
-    if (namaLabelRect != null) {
-      TextLine? bestNameLine;
-      double minDistance = double.maxFinite;
-
-      for (final block in recognizedText.blocks) {
-        for (final line in block.lines) {
-          final lineText = line.text.trim();
-          final lineRect = line.boundingBox;
-
-          // Check if line is to the right of the label and vertically aligned
-          final centerYDiff = (lineRect.center.dy - namaLabelRect.center.dy).abs();
-          // Vertically aligned if vertical distance is within 1.5x label height
-          final isVerticallyAligned = centerYDiff <= (namaLabelRect.height * 1.5);
-          final isToTheRight = lineRect.center.dx > namaLabelRect.right;
-
-          if (isVerticallyAligned && isToTheRight) {
-            // Must not contain numbers, must be longer than 3 characters, and not be a label itself
-            if (lineText.length > 3 &&
-                !lineText.contains(RegExp(r'\d')) &&
-                !_isKtpLabel(lineText)) {
-              
-              // We prefer the line closest to the label horizontally
-              final distance = lineRect.left - namaLabelRect.right;
-              if (distance < minDistance) {
-                minDistance = distance;
-                bestNameLine = line;
-              }
-            }
-          }
-        }
-      }
-
-      if (bestNameLine != null) {
-        final rawName = bestNameLine.text;
-        final cleanedName = rawName.replaceAll(RegExp(r'^[\s\-:=]+'), '').trim();
-        final fixed = _fixAsciiCharacters(cleanedName);
-        if (fixed.length > 3) {
-          return fixed.toUpperCase();
-        }
-      }
-    }
-
-    // 3. Fallback: Search for lines immediately after the detected NIK line
-    if (nik != null) {
-      int nikIndex = -1;
-      for (int i = 0; i < lines.length; i++) {
-        final cleaned = lines[i].replaceAll(RegExp(r'\D'), '');
-        if (cleaned == nik) {
-          nikIndex = i;
-          break;
-        }
-      }
-
-      if (nikIndex != -1) {
-        for (int i = nikIndex + 1; i <= nikIndex + 3 && i < lines.length; i++) {
-          final candidate = lines[i].trim();
-          if (candidate.length > 3 &&
-              !candidate.contains(RegExp(r'\d')) &&
-              !_isKtpLabel(candidate)) {
-            return _fixAsciiCharacters(candidate).toUpperCase();
-          }
-        }
-      }
-    }
-
-    // 4. Fallback: Keyword-based line traversal
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i].toLowerCase();
-      if (line.contains('nama')) {
-        for (int j = i + 1; j <= i + 4 && j < lines.length; j++) {
-          final candidate = lines[j].trim();
-          if (candidate.length > 3 &&
-              !candidate.contains(RegExp(r'\d')) &&
-              !_isKtpLabel(candidate)) {
-            return _fixAsciiCharacters(candidate).toUpperCase();
-          }
-        }
-      }
-    }
-
-    return "RIZKY NUR HIDAYAT"; // Fallback for best UX in demo
-  }
-
-  bool _isKtpLabel(String text) {
-    final cleaned = text.toLowerCase();
-    final labels = [
-      'provinsi', 'kabupaten', 'kota', 'kecamatan', 'kelurahan', 'desa',
-      'tempat', 'tanggal', 'tgl', 'lahir', 'jenis', 'kelamin', 'gol', 'darah',
-      'alamat', 'rt/rw', 'rt', 'rw', 'agama', 'status', 'perkawinan',
-      'pekerjaan', 'kewarganegaraan', 'berlaku', 'hingga', 'nik', 'nama'
-    ];
-    for (final label in labels) {
-      if (cleaned.contains(label)) return true;
-    }
-    return false;
-  }
-
-  String _fixAsciiCharacters(String text) {
-    return text
-        .replaceAll('Ä', 'A')
-        .replaceAll('Ü', 'U')
-        .replaceAll('ü', 'u')
-        .replaceAll('Ö', 'O')
-        .replaceAll('ö', 'o')
-        .replaceAll('Ñ', 'N')
-        .replaceAll('Ë', 'E')
-        .replaceAll('ë', 'e')
-        .replaceAll('ÿ', 'y')
-        .replaceAll('ï', 'i');
-  }
 
   // ignore: unused_element
   void _simulateKtp() async {
@@ -433,7 +228,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         // Semi-transparent overlay with card cutout
         Positioned.fill(
           child: CustomPaint(
-            painter: KtpCutoutPainter(),
+            painter: KtpCutoutPainter(documentType: widget.documentType),
           ),
         ),
 
@@ -449,22 +244,22 @@ class _KtpScannerViewState extends State<KtpScannerView> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white24),
             ),
-            child: const Column(
+            child: Column(
               children: [
                 Text(
-                  'FOTO KTP ANDA',
-                  style: TextStyle(
+                  'FOTO ${widget.documentType.label} ANDA',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.2,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Posisikan KTP pas di dalam bingkai.\nPastikan tulisan NIK terlihat jelas dan tidak buram.',
+                  'Posisikan ${widget.documentType.label} pas di dalam bingkai.\nPastikan tulisan nomor identitas terlihat jelas dan tidak buram.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
                   ),
@@ -478,15 +273,15 @@ class _KtpScannerViewState extends State<KtpScannerView> {
         if (_isProcessing)
           Container(
             color: Colors.black54,
-            child: const Center(
+            child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 16),
                   Text(
-                    'Mengekstrak & Memvalidasi KTP...',
-                    style: TextStyle(
+                    'Mengekstrak & Memvalidasi ${widget.documentType.label}...',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -515,7 +310,7 @@ class _KtpScannerViewState extends State<KtpScannerView> {
                     
                     // Real Shutter Button
                     GestureDetector(
-                      onTap: _isCameraInitialized ? _captureKtp : null,
+                      onTap: _isCameraInitialized ? _captureDocument : null,
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: const BoxDecoration(
@@ -567,6 +362,10 @@ class _KtpScannerViewState extends State<KtpScannerView> {
 }
 
 class KtpCutoutPainter extends CustomPainter {
+  final DocumentType documentType;
+
+  KtpCutoutPainter({required this.documentType});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.black.withAlpha(160);
@@ -594,10 +393,12 @@ class KtpCutoutPainter extends CustomPainter {
       ..strokeWidth = 3;
     canvas.drawRRect(rrect, borderPaint);
 
-    // Draw photo frame indicator inside KTP layout (Right side)
+    // Draw photo frame indicator inside layout (Right side for KTP, Left side for SIM & Passport)
     final photoWidth = width * 0.30;
     final photoHeight = height * 0.65;
-    final photoLeft = rect.right - photoWidth - (width * 0.05);
+    final photoLeft = (documentType == DocumentType.ktp)
+        ? rect.right - photoWidth - (width * 0.05)
+        : rect.left + (width * 0.05);
     final photoTop = rect.top + (height * 0.15);
 
     final photoRect = Rect.fromLTWH(photoLeft, photoTop, photoWidth, photoHeight);
@@ -613,7 +414,9 @@ class KtpCutoutPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant KtpCutoutPainter oldDelegate) {
+    return oldDelegate.documentType != documentType;
+  }
 }
 
 // Simple extension to add dash effect to canvas strokes

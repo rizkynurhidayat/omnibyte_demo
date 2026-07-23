@@ -9,6 +9,7 @@ import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_bloc.dart';
 import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_event.dart';
 import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_state.dart';
 import 'package:omnibyte_demo/ekyc/presentation/pages/ekyc_page.dart';
+import 'package:omnibyte_demo/ekyc/domain/entities/document_type.dart';
 
 class MockEkycBloc extends Mock implements EkycBloc {}
 
@@ -38,7 +39,7 @@ void main() {
       home: Scaffold(
         body: BlocProvider<EkycBloc>.value(
           value: mockEkycBloc,
-          child: const EkycPage(),
+          child: const EkycPage(documentType: DocumentType.ktp),
         ),
       ),
     );
@@ -54,6 +55,7 @@ void main() {
 
   testWidgets('renders KtpReview screen and dispatches events on button clicks', (WidgetTester tester) async {
     final state = const EkycStepKtpCompleted(
+      documentType: DocumentType.ktp,
       ktpPath: 'simulated_ktp.jpg',
       croppedFacePath: 'simulated_ktp_face.jpg',
       ocrJsonPath: 'simulated_ocr.json',
@@ -81,7 +83,7 @@ void main() {
     await tester.tap(find.text('Foto Ulang KTP'));
     await tester.pump();
     // 1 call from initState, 1 call from button press
-    verify(() => mockEkycBloc.add(ResetEkyc())).called(2);
+    verify(() => mockEkycBloc.add(const ResetEkyc(DocumentType.ktp))).called(2);
 
     await tester.ensureVisible(find.text('Lanjutkan'));
     await tester.pumpAndSettle();
@@ -100,6 +102,7 @@ void main() {
 
   testWidgets('renders SelfieKtpReview screen and dispatches events on button clicks', (WidgetTester tester) async {
     final state = const EkycStepSelfieKtpCompleted(
+      documentType: DocumentType.ktp,
       ktpPath: 'simulated_ktp.jpg',
       croppedFacePath: 'simulated_ktp_face.jpg',
       ocrJsonPath: 'simulated_ocr.json',
@@ -160,7 +163,8 @@ void main() {
 
   testWidgets('renders SuccessScreen on verification success', (WidgetTester tester) async {
     final state = const EkycSuccessState(EkycVerificationEntity(
-      status: 'success',
+      status: 'completed',
+      verificationResult: 'Auto Approved',
       message: 'Cocok 92%',
       nik: '3273012345678901',
       nama: 'RIZKY NURHIDAYAT',
@@ -203,11 +207,11 @@ void main() {
     // Tap Ulangi Verifikasi
     await tester.tap(find.text('Ulangi Verifikasi'));
     await tester.pump();
-    verify(() => mockEkycBloc.add(ResetEkyc())).called(2); // 1 from initState, 1 from button press
+    verify(() => mockEkycBloc.add(const ResetEkyc(DocumentType.ktp))).called(2); // 1 from initState, 1 from button press
   });
 
   testWidgets('shows failure dialog when state is EkycFailureState and click Coba Lagi', (WidgetTester tester) async {
-    final fallback = EkycStepKtpActive();
+    final fallback = const EkycStepKtpActive(DocumentType.ktp);
     final failureState = EkycFailureState(
       errorMessage: 'Koneksi terputus',
       fallbackState: fallback,

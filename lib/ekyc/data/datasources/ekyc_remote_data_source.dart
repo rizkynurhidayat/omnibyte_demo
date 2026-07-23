@@ -5,9 +5,11 @@ import 'package:tusc/tusc.dart';
 import 'package:cross_file/cross_file.dart' show XFile;
 import '../../../core/utils/zip_helper.dart';
 import '../models/ekyc_verification_model.dart';
+import '../../domain/entities/document_type.dart';
 
 abstract class EkycRemoteDataSource {
   Future<EkycVerificationModel> verifyEkyc({
+    required DocumentType documentType,
     required File ktpFile,
     required File selfieFile,
     required File selfieFaceFile,
@@ -27,6 +29,7 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
 
   @override
   Future<EkycVerificationModel> verifyEkyc({
+    required DocumentType documentType,
     required File ktpFile,
     required File selfieFile,
     required File selfieFaceFile,
@@ -45,14 +48,16 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
           : selfieFile.parent.path;
       final zipFilePath = '$parentDir/${firstName}_${nik}_verif.zip';
 
+      final docPrefix = documentType.filePrefix;
+
       // Zip the 5 files with custom names inside the zip file
       final zipFile = await ZipHelper.createZip(
         zipFilePath: zipFilePath,
         filesToZip: {
-          'ktp.${ktpFile.path.split('.').last.toLowerCase()}': ktpFile,
+          '$docPrefix.${ktpFile.path.split('.').last.toLowerCase()}': ktpFile,
           'selfie.${selfieFile.path.split('.').last.toLowerCase()}': selfieFile,
           'crop_wajah.${selfieFaceFile.path.split('.').last.toLowerCase()}': selfieFaceFile,
-          'crop_ktp.${ktpFaceFile.path.split('.').last.toLowerCase()}': ktpFaceFile,
+          'crop_$docPrefix.${ktpFaceFile.path.split('.').last.toLowerCase()}': ktpFaceFile,
           'ocr.json': ocrJsonFile,
         },
       );
@@ -105,18 +110,18 @@ class EkycRemoteDataSourceImpl implements EkycRemoteDataSource {
         nama: name,
       );
     } catch (e) {
-      // Fallback dummy data if connection fails or server is offline, so the demo runs.
+      // Fallback response if connection fails or server is offline.
       // ignore: avoid_print
       print('Error during e-KYC verification: $e');
       await Future.delayed(const Duration(seconds: 2));
       return EkycVerificationModel(
-        status: 'completed',
-        message: 'Verifikasi biometrik e-KYC berhasil (Mock). Detail upload error: $e',
+        status: 'failed',
+        message: 'Gagal melakukan verifikasi e-KYC. Detail error: $e',
         tusUploadId: fallbackTusId,
         nik: nik,
         nama: name,
-        similarityScore: 92.4,
-        verificationResult: 'Auto Approved',
+        similarityScore: 0.0,
+        verificationResult: 'Failed',
       );
     }
   }

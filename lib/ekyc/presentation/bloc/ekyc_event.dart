@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'ekyc_state.dart';
+import '../../domain/entities/document_type.dart';
 
 abstract class EkycEvent extends Equatable {
   const EkycEvent();
@@ -8,7 +9,15 @@ abstract class EkycEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class ResetEkyc extends EkycEvent {}
+
+class ResetEkyc extends EkycEvent {
+  final DocumentType documentType;
+
+  const ResetEkyc(this.documentType);
+
+  @override
+  List<Object?> get props => [documentType];
+}
 
 class KtpCaptured extends EkycEvent {
   final String ktpPath;

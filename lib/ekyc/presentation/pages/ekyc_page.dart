@@ -7,9 +7,11 @@ import '../bloc/ekyc_event.dart';
 import '../bloc/ekyc_state.dart';
 import '../widgets/ktp_scanner_view.dart';
 import '../widgets/selfie_ktp_scanner_view.dart';
+import '../../domain/entities/document_type.dart';
 
 class EkycPage extends StatefulWidget {
-  const EkycPage({super.key});
+  final DocumentType documentType;
+  const EkycPage({super.key, required this.documentType});
 
   @override
   State<EkycPage> createState() => _EkycPageState();
@@ -25,7 +27,7 @@ class _EkycPageState extends State<EkycPage> {
     ]);
     
     // Start flow
-    context.read<EkycBloc>().add(ResetEkyc());
+    context.read<EkycBloc>().add(ResetEkyc(widget.documentType));
   }
 
   @override
@@ -97,13 +99,22 @@ class _EkycPageState extends State<EkycPage> {
         },
         builder: (context, state) {
           final currentStep = _getCurrentStep(state);
+          final docType = (state is EkycStepKtpActive)
+              ? state.documentType
+              : (state is EkycStepKtpCompleted)
+                  ? state.documentType
+                  : (state is EkycStepSelfieKtpActive)
+                      ? state.documentType
+                      : (state is EkycStepSelfieKtpCompleted)
+                          ? state.documentType
+                          : widget.documentType;
 
           return Stack(
             children: [
               Column(
                 children: [
                   // Step Indicator Header
-                  _buildStepperHeader(currentStep),
+                  _buildStepperHeader(currentStep, docType),
 
                   // Main Wizard Step Body
                   Expanded(
@@ -156,15 +167,16 @@ class _EkycPageState extends State<EkycPage> {
     );
   }
 
-  Widget _buildStepperHeader(int currentStep) {
+  Widget _buildStepperHeader(int currentStep, DocumentType docType) {
+    final docLabel = docType.label;
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         children: [
-          _buildStepNode(0, 'Pindai KTP', currentStep >= 0, currentStep == 0),
+          _buildStepNode(0, 'Pindai $docLabel', currentStep >= 0, currentStep == 0),
           _buildStepDivider(currentStep >= 1),
-          _buildStepNode(1, 'Selfie + KTP', currentStep >= 1, currentStep == 1),
+          _buildStepNode(1, 'Selfie + $docLabel', currentStep >= 1, currentStep == 1),
           _buildStepDivider(currentStep >= 2),
           _buildStepNode(2, 'Hasil Verifikasi', currentStep >= 2, currentStep == 2),
         ],
@@ -224,6 +236,7 @@ class _EkycPageState extends State<EkycPage> {
   Widget _buildStepBody(BuildContext context, EkycState state) {
     if (state is EkycStepKtpActive) {
       return KtpScannerView(
+        documentType: state.documentType,
         onCaptured: (ktpPath, croppedFacePath, ocrJsonPath, nik, name) {
           context.read<EkycBloc>().add(KtpCaptured(
                 ktpPath: ktpPath,
@@ -242,9 +255,11 @@ class _EkycPageState extends State<EkycPage> {
 
     if (state is EkycStepSelfieKtpActive) {
       return SelfieKtpScannerView(
+        documentType: state.documentType,
         expectedNik: state.nik,
         expectedName: state.name,
         ktpPath: state.ktpPath,
+        documentFacePath: state.croppedFacePath,
         onCaptured: (selfiePath, croppedSelfieFacePath, croppedKtpFacePath) {
           context.read<EkycBloc>().add(SelfieKtpCaptured(
                 selfiePath: selfiePath,
@@ -269,15 +284,16 @@ class _EkycPageState extends State<EkycPage> {
 
   Widget _buildKtpReviewScreen(BuildContext context, EkycStepKtpCompleted state) {
     final isSimulated = state.ktpPath == 'simulated_ktp.jpg';
+    final docLabel = state.documentType.label;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Verifikasi Hasil Pemindaian KTP',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            'Verifikasi Hasil Pemindaian $docLabel',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -287,9 +303,9 @@ class _EkycPageState extends State<EkycPage> {
           const SizedBox(height: 20),
 
           // KTP Photo Preview
-          const Text(
-            'Foto KTP Utuh',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          Text(
+            'Foto $docLabel Utuh',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           ClipRRect(
@@ -313,9 +329,9 @@ class _EkycPageState extends State<EkycPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Wajah KTP',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  Text(
+                    'Wajah $docLabel',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   ClipRRect(
@@ -343,7 +359,7 @@ class _EkycPageState extends State<EkycPage> {
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    _buildExtractedField('NIK', state.nik),
+                    _buildExtractedField('Nomor Identitas', state.nik),
                     const SizedBox(height: 12),
                     _buildExtractedField('Nama', state.name),
                   ],
@@ -365,9 +381,9 @@ class _EkycPageState extends State<EkycPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    context.read<EkycBloc>().add(ResetEkyc());
+                    context.read<EkycBloc>().add(ResetEkyc(state.documentType));
                   },
-                  child: const Text('Foto Ulang KTP'),
+                  child: Text('Foto Ulang $docLabel'),
                 ),
               ),
               const SizedBox(width: 16),
@@ -426,20 +442,21 @@ class _EkycPageState extends State<EkycPage> {
 
   Widget _buildSelfieKtpReviewScreen(BuildContext context, EkycStepSelfieKtpCompleted state) {
     final isSimulated = state.selfiePath == 'simulated_selfie.jpg';
+    final docLabel = state.documentType.label;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Pratinjau Selfie & KTP',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            'Pratinjau Selfie & $docLabel',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Harap tinjau foto selfie memegang KTP Anda sebelum melakukan verifikasi.',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
+          Text(
+            'Harap tinjau foto selfie memegang $docLabel Anda sebelum melakukan verifikasi.',
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
           ),
           const SizedBox(height: 24),
 
@@ -453,9 +470,9 @@ class _EkycPageState extends State<EkycPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Foto Selfie + KTP',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    Text(
+                      'Foto Selfie + $docLabel',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     ClipRRect(
@@ -495,9 +512,9 @@ class _EkycPageState extends State<EkycPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Wajah KTP (dari Selfie)',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    Text(
+                      'Wajah $docLabel (dari Selfie)',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
                     ClipRRect(
@@ -572,16 +589,32 @@ class _EkycPageState extends State<EkycPage> {
     // Status is 'pending' or 'processing' before the verification is actually done.
     final isPending = statusLower == 'pending' || statusLower == 'processing';
 
-    // Once completed, we look at verificationResult to determine success.
-    // Assuming backend returns 'Auto Approved' or 'Approved' on success.
-    final isSuccess = statusLower == 'completed' && (verificationLower == 'auto approved' || verificationLower == 'approved');
-    final isFailed = statusLower == 'failed' || (statusLower == 'completed' && verificationLower == 'rejected');
+    // Verification is considered successful if status is completed/success, result is approved/auto approved/passed,
+    // and similarityScore (if present) is at least 70%.
+    final isApproved = verificationLower == 'auto approved' || 
+        verificationLower == 'approved' || 
+        verificationLower == 'passed' || 
+        verificationLower == 'success';
+    final isSuccess = (statusLower == 'completed' || statusLower == 'success') &&
+        isApproved &&
+        (result.similarityScore == null || result.similarityScore! >= 70.0);
 
     if (isPending && result.tusUploadId != null) {
       return _buildPendingScreen(context, result.tusUploadId!);
     }
 
-    // Determine colors based on status (green for completed, red for failed, etc.)
+    String displayMessage = result.message;
+    if (!isSuccess) {
+      if (displayMessage.isEmpty || displayMessage.toLowerCase().contains('berhasil')) {
+        displayMessage = 'Verifikasi biometrik gagal. Kemiripan wajah tidak memenuhi syarat atau data tidak cocok.';
+      }
+    } else {
+      if (displayMessage.isEmpty) {
+        displayMessage = 'Verifikasi biometrik e-KYC Anda telah berhasil disetujui.';
+      }
+    }
+
+    // Determine colors based on status (green for completed & approved, red for failed, etc.)
     final Color iconColor = isSuccess 
         ? Theme.of(context).colorScheme.secondary 
         : Theme.of(context).colorScheme.error;
@@ -614,7 +647,7 @@ class _EkycPageState extends State<EkycPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  result.message,
+                  displayMessage,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
@@ -625,6 +658,8 @@ class _EkycPageState extends State<EkycPage> {
 
                 _buildResultItem('NIK', result.nik ?? '-'),
                 _buildResultItem('Nama', result.nama ?? '-'),
+                if (result.verificationResult != null && result.verificationResult!.isNotEmpty)
+                  _buildResultItem('Hasil Biometrik', result.verificationResult!),
                 if (result.similarityScore != null)
                   _buildResultItem('Skor Kemiripan', '${result.similarityScore}%'),
 
@@ -665,7 +700,7 @@ class _EkycPageState extends State<EkycPage> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: () {
-                            context.read<EkycBloc>().add(ResetEkyc());
+                            context.read<EkycBloc>().add(ResetEkyc(widget.documentType));
                           },
                           child: const Text(
                             'Ulangi Verifikasi',

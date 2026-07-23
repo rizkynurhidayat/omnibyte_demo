@@ -52,15 +52,17 @@ void main() {
     expect(find.text('Pindai wajah dan kartu identitas dengan teknologi OCR dan Deteksi Keaktifan (Liveness)'), findsOneWidget);
 
     // Verify Menu cards
-    expect(find.text('Scanner Demo'), findsOneWidget);
+    expect(find.text('e-KYC KTP'), findsOneWidget);
+    expect(find.text('e-KYC SIM'), findsOneWidget);
+    expect(find.text('e-KYC Passport'), findsOneWidget);
     expect(find.text('Customer Service Chat'), findsOneWidget);
   });
 
-  testWidgets('tapping Scanner Demo navigates to EkycPage', (WidgetTester tester) async {
+  testWidgets('tapping e-KYC KTP navigates to EkycPage', (WidgetTester tester) async {
     await tester.pumpWidget(createWidgetUnderTest());
 
-    // Tap Scanner Demo card
-    await tester.tap(find.text('Scanner Demo'));
+    // Tap e-KYC KTP card
+    await tester.tap(find.text('e-KYC KTP'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -72,8 +74,10 @@ void main() {
   testWidgets('tapping Customer Service Chat navigates to ChatPage', (WidgetTester tester) async {
     await tester.pumpWidget(createWidgetUnderTest());
 
-    // Tap Customer Service Chat card
-    await tester.tap(find.text('Customer Service Chat'));
+    // Scroll to and tap Customer Service Chat card
+    final chatCard = find.text('Customer Service Chat');
+    await tester.ensureVisible(chatCard);
+    await tester.tap(chatCard);
     await tester.pumpAndSettle();
 
     // Verify we navigated to ChatPage

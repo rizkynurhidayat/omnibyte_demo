@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/ekyc_verification_entity.dart';
+import '../../domain/entities/document_type.dart';
 
 abstract class EkycState extends Equatable {
   const EkycState();
@@ -10,9 +11,17 @@ abstract class EkycState extends Equatable {
 
 class EkycInitial extends EkycState {}
 
-class EkycStepKtpActive extends EkycState {}
+class EkycStepKtpActive extends EkycState {
+  final DocumentType documentType;
+
+  const EkycStepKtpActive(this.documentType);
+
+  @override
+  List<Object?> get props => [documentType];
+}
 
 class EkycStepKtpCompleted extends EkycState {
+  final DocumentType documentType;
   final String ktpPath;
   final String croppedFacePath;
   final String ocrJsonPath;
@@ -20,6 +29,7 @@ class EkycStepKtpCompleted extends EkycState {
   final String name;
 
   const EkycStepKtpCompleted({
+    required this.documentType,
     required this.ktpPath,
     required this.croppedFacePath,
     required this.ocrJsonPath,
@@ -28,10 +38,11 @@ class EkycStepKtpCompleted extends EkycState {
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name];
+  List<Object?> get props => [documentType, ktpPath, croppedFacePath, ocrJsonPath, nik, name];
 }
 
 class EkycStepSelfieKtpActive extends EkycState {
+  final DocumentType documentType;
   final String ktpPath;
   final String croppedFacePath;
   final String ocrJsonPath;
@@ -39,6 +50,7 @@ class EkycStepSelfieKtpActive extends EkycState {
   final String name;
 
   const EkycStepSelfieKtpActive({
+    required this.documentType,
     required this.ktpPath,
     required this.croppedFacePath,
     required this.ocrJsonPath,
@@ -47,10 +59,11 @@ class EkycStepSelfieKtpActive extends EkycState {
   });
 
   @override
-  List<Object?> get props => [ktpPath, croppedFacePath, ocrJsonPath, nik, name];
+  List<Object?> get props => [documentType, ktpPath, croppedFacePath, ocrJsonPath, nik, name];
 }
 
 class EkycStepSelfieKtpCompleted extends EkycState {
+  final DocumentType documentType;
   final String ktpPath;
   final String croppedFacePath;
   final String ocrJsonPath;
@@ -61,6 +74,7 @@ class EkycStepSelfieKtpCompleted extends EkycState {
   final String croppedKtpFacePath;
 
   const EkycStepSelfieKtpCompleted({
+    required this.documentType,
     required this.ktpPath,
     required this.croppedFacePath,
     required this.ocrJsonPath,
@@ -73,6 +87,7 @@ class EkycStepSelfieKtpCompleted extends EkycState {
 
   @override
   List<Object?> get props => [
+        documentType,
         ktpPath,
         croppedFacePath,
         ocrJsonPath,

@@ -3,6 +3,7 @@ import 'package:dartz/dartz.dart';
 import '../../../../core/error/failures.dart';
 import '../entities/ekyc_verification_entity.dart';
 import '../repositories/ekyc_repository.dart';
+import '../entities/document_type.dart';
 
 class VerifyEkycUseCase {
   final EkycRepository repository;
@@ -10,6 +11,7 @@ class VerifyEkycUseCase {
   VerifyEkycUseCase(this.repository);
 
   Future<Either<Failure, EkycVerificationEntity>> call({
+    required DocumentType documentType,
     required File ktpFile,
     required File selfieFile,
     required File selfieFaceFile,
@@ -19,6 +21,7 @@ class VerifyEkycUseCase {
     required String name,
   }) async {
     return await repository.verifyEkyc(
+      documentType: documentType,
       ktpFile: ktpFile,
       selfieFile: selfieFile,
       selfieFaceFile: selfieFaceFile,

@@ -3,6 +3,7 @@ import 'package:dartz/dartz.dart';
 import '../../../../core/error/failures.dart';
 import '../../domain/entities/ekyc_verification_entity.dart';
 import '../../domain/repositories/ekyc_repository.dart';
+import '../../domain/entities/document_type.dart';
 import '../datasources/ekyc_remote_data_source.dart';
 
 class EkycRepositoryImpl implements EkycRepository {
@@ -12,6 +13,7 @@ class EkycRepositoryImpl implements EkycRepository {
 
   @override
   Future<Either<Failure, EkycVerificationEntity>> verifyEkyc({
+    required DocumentType documentType,
     required File ktpFile,
     required File selfieFile,
     required File selfieFaceFile,
@@ -22,6 +24,7 @@ class EkycRepositoryImpl implements EkycRepository {
   }) async {
     try {
       final result = await remoteDataSource.verifyEkyc(
+        documentType: documentType,
         ktpFile: ktpFile,
         selfieFile: selfieFile,
         selfieFaceFile: selfieFaceFile,

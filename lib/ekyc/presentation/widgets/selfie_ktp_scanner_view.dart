@@ -10,17 +10,23 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/permission_helper.dart';
 import '../../../core/utils/string_utils.dart';
 
+import '../../domain/entities/document_type.dart';
+
 class SelfieKtpScannerView extends StatefulWidget {
+  final DocumentType documentType;
   final String expectedNik;
   final String expectedName;
   final String ktpPath;
+  final String documentFacePath;
   final Function(String selfiePath, String croppedSelfieFacePath, String croppedKtpFacePath) onCaptured;
 
   const SelfieKtpScannerView({
     super.key,
+    required this.documentType,
     required this.expectedNik,
     required this.expectedName,
     required this.ktpPath,
+    required this.documentFacePath,
     required this.onCaptured,
   });
 
@@ -37,7 +43,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
 
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
-      enableClassification: false,
+      enableClassification: true,
       enableLandmarks: false,
       enableTracking: false,
     ),
@@ -46,6 +52,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
   final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
   bool _isFaceDetectedLive = false;
+  String _livenessStatusText = "Posisikan wajah di dalam oval";
 
   @override
   void initState() {
@@ -76,6 +83,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
           if (_isFaceDetectedLive != hasFace) {
             setState(() {
               _isFaceDetectedLive = hasFace;
+              _livenessStatusText = hasFace ? "Wajah Terdeteksi" : "Posisikan wajah di dalam oval";
             });
           }
         }
@@ -218,8 +226,12 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
       // Menggunakan Fuzzy String Matching (Levenshtein Distance)
       // Membutuhkan kemiripan NIK (minimal 14 digit) > 85% ATAU Nama Lengkap > 85%
       double nikSimilarity = 0.0;
-      if (targetNik.length == 16) {
+      if (widget.documentType == DocumentType.ktp && targetNik.length == 16) {
          nikSimilarity = StringUtils.findBestMatch(normalizedNikText, targetNik.substring(0, 14));
+      } else if (widget.documentType == DocumentType.sim && targetNik.length >= 12) {
+         nikSimilarity = StringUtils.findBestMatch(normalizedNikText, targetNik.substring(0, 10));
+      } else if (widget.documentType == DocumentType.passport && targetNik.length >= 7) {
+         nikSimilarity = StringUtils.findBestMatch(rawText, targetNik);
       }
       
       double nameSimilarity = 0.0;
@@ -233,7 +245,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
       }
 
       if (!isMatched) {
-        _showErrorAndReset("KTP tidak terdeteksi atau data tidak cocok! Gunakan KTP yang sama.");
+        _showErrorAndReset("${widget.documentType.label} tidak terdeteksi atau data tidak cocok! Gunakan ${widget.documentType.label} yang sama.");
         return;
       }
 
@@ -262,23 +274,20 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         suffix: '_selfieface',
       );
 
-      // Crop KTP face. Try to crop it from the selfie photo if detected; otherwise fallback to cropping from Step 1 KTP photo.
+      // Crop face area from selfie image for the document face in step 2 if detected, otherwise fallback to Step 1 face
       File croppedKtpFaceFile;
       if (ktpFaceOnSelfie != null) {
         final ktpBbox = ktpFaceOnSelfie.boundingBox;
-        
-        // We crop the KTP face from the selfie file path using _ktpselfieface suffix
         croppedKtpFaceFile = await ImageUtils.cropFace(
           file.path,
           ktpBbox.left.toInt(),
           ktpBbox.top.toInt(),
           ktpBbox.width.toInt(),
           ktpBbox.height.toInt(),
-          suffix: '_ktpselfieface',
+          suffix: '_ktpface',
         );
       } else {
-        // Fallback: Crop from Step 1 KTP image
-        croppedKtpFaceFile = await ImageUtils.cropKtpFace(widget.ktpPath);
+        croppedKtpFaceFile = File(widget.documentFacePath);
       }
 
       // Success - Callback with selfie path, cropped selfie face path, and cropped KTP face path
@@ -365,7 +374,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
         // Dual cutout overlay (Oval face + Rect KTP)
         Positioned.fill(
           child: CustomPaint(
-            painter: SelfieKtpCutoutPainter(),
+            painter: SelfieKtpCutoutPainter(widget.documentType),
           ),
         ),
 
@@ -392,13 +401,13 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _isFaceDetectedLive ? Icons.check_circle : Icons.warning_rounded,
+                    _isFaceDetectedLive ? Icons.remove_red_eye : Icons.warning_rounded,
                     color: Colors.white,
                     size: 16,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _isFaceDetectedLive ? 'Wajah Terdeteksi' : 'Wajah Tidak Terdeteksi',
+                    _livenessStatusText,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -434,7 +443,7 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
             ),
           ),
 
-        // Controls (Shutter + Simulator)
+        // Shutter Button & Switch Camera Button
         if (!_isCapturing)
           Positioned(
             bottom: 40,
@@ -446,24 +455,21 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Placeholder to balance the switch camera button
-                    const SizedBox(width: 48), 
+                    const SizedBox(width: 48),
                     const SizedBox(width: 32),
-                    
-                    // Shutter Button
                     GestureDetector(
-                      onTap: (_isCameraInitialized && _isFaceDetectedLive) ? _captureSelfie : null,
+                      onTap: _isCameraInitialized ? _captureSelfie : null,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: (_isCameraInitialized && _isFaceDetectedLive) ? Colors.white24 : Colors.transparent,
+                        decoration: const BoxDecoration(
+                          color: Colors.white24,
                           shape: BoxShape.circle,
                         ),
                         child: Container(
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: (_isCameraInitialized && _isFaceDetectedLive) ? Colors.white : Colors.grey[400],
+                            color: _isCameraInitialized ? Colors.white : Colors.grey,
                             shape: BoxShape.circle,
                             boxShadow: const [
                               BoxShadow(
@@ -474,16 +480,14 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                             ],
                           ),
                           child: Icon(
-                            _lensDirection == CameraLensDirection.front ? Icons.camera_front : Icons.camera_alt,
-                            color: (_isCameraInitialized && _isFaceDetectedLive) ? Theme.of(context).colorScheme.primary : Colors.grey[600],
+                            Icons.camera_alt,
+                            color: Theme.of(context).colorScheme.primary,
                             size: 32,
                           ),
                         ),
                       ),
                     ),
-                    
                     const SizedBox(width: 32),
-                    
                     // Switch Camera Button
                     CircleAvatar(
                       backgroundColor: Colors.black54,
@@ -494,7 +498,6 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
                     ),
                   ],
                 ),
-                // Simulator button hidden
               ],
             ),
           ),
@@ -504,13 +507,17 @@ class _SelfieKtpScannerViewState extends State<SelfieKtpScannerView> {
 }
 
 class SelfieKtpCutoutPainter extends CustomPainter {
+  final DocumentType documentType;
+
+  SelfieKtpCutoutPainter(this.documentType);
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.black.withAlpha(160);
 
     // 1. Oval size & center at the top
-    final ovalWidth = size.width * 0.55;
-    final ovalHeight = size.height * 0.33;
+    final ovalWidth = size.width * 0.45;
+    final ovalHeight = size.height * 0.28;
     final ovalCenter = Offset(size.width / 2, size.height * 0.25);
     final ovalRect = Rect.fromCenter(
       center: ovalCenter,
@@ -519,8 +526,8 @@ class SelfieKtpCutoutPainter extends CustomPainter {
     );
 
     // 2. Rectangle size & center for KTP at the bottom
-    final ktpWidth = size.width * 0.55;
-    final ktpHeight = size.height * 0.18;
+    final ktpWidth = size.width * 0.65;
+    final ktpHeight = size.height * 0.23;
     final ktpCenter = Offset(size.width / 2, size.height * 0.65);
     final ktpRect = Rect.fromCenter(
       center: ktpCenter,
@@ -567,9 +574,9 @@ class SelfieKtpCutoutPainter extends CustomPainter {
       Offset(ovalCenter.dx - (textPainter.width / 2), ovalCenter.dy + (ovalHeight / 2) + 8),
     );
 
-    textPainter.text = const TextSpan(
-      text: "Pegang KTP DI SINI",
-      style: TextStyle(
+    textPainter.text = TextSpan(
+      text: "Pegang ${documentType.label} DI SINI",
+      style: const TextStyle(
         color: Colors.white,
         fontSize: 12,
         fontWeight: FontWeight.bold,

@@ -6,6 +6,7 @@ import '../../domain/usecases/verify_ekyc_usecase.dart';
 import '../../domain/usecases/check_ekyc_status_usecase.dart';
 import 'ekyc_event.dart';
 import 'ekyc_state.dart';
+import '../../domain/entities/document_type.dart';
 
 class EkycBloc extends Bloc<EkycEvent, EkycState> {
   final VerifyEkycUseCase verifyEkycUseCase;
@@ -26,7 +27,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
   }
 
   void _onResetEkyc(ResetEkyc event, Emitter<EkycState> emit) {
-    emit(EkycStepKtpActive());
+    emit(EkycStepKtpActive(event.documentType));
   }
 
   void _onRestoreState(RestoreState event, Emitter<EkycState> emit) {
@@ -34,7 +35,10 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
   }
 
   void _onKtpCaptured(KtpCaptured event, Emitter<EkycState> emit) {
+    final currentState = state;
+    final docType = currentState is EkycStepKtpActive ? currentState.documentType : DocumentType.ktp;
     emit(EkycStepKtpCompleted(
+      documentType: docType,
       ktpPath: event.ktpPath,
       croppedFacePath: event.croppedFacePath,
       ocrJsonPath: event.ocrJsonPath,
@@ -44,7 +48,10 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
   }
 
   void _onStartSelfieKtpScan(StartSelfieKtpScan event, Emitter<EkycState> emit) {
+    final currentState = state;
+    final docType = currentState is EkycStepKtpCompleted ? currentState.documentType : DocumentType.ktp;
     emit(EkycStepSelfieKtpActive(
+      documentType: docType,
       ktpPath: event.ktpPath,
       croppedFacePath: event.croppedFacePath,
       ocrJsonPath: event.ocrJsonPath,
@@ -57,6 +64,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
     final currentState = state;
     if (currentState is EkycStepSelfieKtpActive) {
       emit(EkycStepSelfieKtpCompleted(
+        documentType: currentState.documentType,
         ktpPath: currentState.ktpPath,
         croppedFacePath: currentState.croppedFacePath,
         ocrJsonPath: currentState.ocrJsonPath,
@@ -89,6 +97,7 @@ class EkycBloc extends Bloc<EkycEvent, EkycState> {
 
       // 2. Call verification use case
       final result = await verifyEkycUseCase(
+        documentType: currentState.documentType,
         ktpFile: ktpCompressed,
         selfieFile: selfieCompressed,
         selfieFaceFile: selfieFaceCompressed,

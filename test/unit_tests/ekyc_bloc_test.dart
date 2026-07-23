@@ -9,6 +9,7 @@ import 'package:omnibyte_demo/ekyc/domain/usecases/check_ekyc_status_usecase.dar
 import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_bloc.dart';
 import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_event.dart';
 import 'package:omnibyte_demo/ekyc/presentation/bloc/ekyc_state.dart';
+import 'package:omnibyte_demo/ekyc/domain/entities/document_type.dart';
 
 class MockVerifyEkycUseCase extends Mock implements VerifyEkycUseCase {}
 class MockCheckEkycStatusUseCase extends Mock implements CheckEkycStatusUseCase {}
@@ -20,6 +21,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(File(''));
+    registerFallbackValue(DocumentType.ktp);
   });
 
   setUp(() {
@@ -40,10 +42,10 @@ void main() {
   });
 
   test('ResetEkyc event should emit EkycStepKtpActive', () async {
-    ekycBloc.add(ResetEkyc());
+    ekycBloc.add(const ResetEkyc(DocumentType.ktp));
     await expectLater(
       ekycBloc.stream,
-      emitsInOrder([EkycStepKtpActive()]),
+      emitsInOrder([const EkycStepKtpActive(DocumentType.ktp)]),
     );
   });
 
@@ -59,6 +61,7 @@ void main() {
       ekycBloc.stream,
       emitsInOrder([
         const EkycStepKtpCompleted(
+          documentType: DocumentType.ktp,
           ktpPath: 'simulated_ktp.jpg',
           croppedFacePath: 'simulated_ktp_face.jpg',
           ocrJsonPath: 'simulated_ocr.json',
@@ -81,6 +84,7 @@ void main() {
       ekycBloc.stream,
       emitsInOrder([
         const EkycStepSelfieKtpActive(
+          documentType: DocumentType.ktp,
           ktpPath: 'simulated_ktp.jpg',
           croppedFacePath: 'simulated_ktp_face.jpg',
           ocrJsonPath: 'simulated_ocr.json',
@@ -110,6 +114,7 @@ void main() {
       ekycBloc.stream,
       emitsInOrder([
         const EkycStepSelfieKtpActive(
+          documentType: DocumentType.ktp,
           ktpPath: 'simulated_ktp.jpg',
           croppedFacePath: 'simulated_ktp_face.jpg',
           ocrJsonPath: 'simulated_ocr.json',
@@ -117,6 +122,7 @@ void main() {
           name: 'RIZKY NURHIDAYAT',
         ),
         const EkycStepSelfieKtpCompleted(
+          documentType: DocumentType.ktp,
           ktpPath: 'simulated_ktp.jpg',
           croppedFacePath: 'simulated_ktp_face.jpg',
           ocrJsonPath: 'simulated_ocr.json',
@@ -140,6 +146,7 @@ void main() {
     );
 
     when(() => mockVerifyEkycUseCase(
+          documentType: any(named: 'documentType'),
           ktpFile: any(named: 'ktpFile'),
           selfieFile: any(named: 'selfieFile'),
           selfieFaceFile: any(named: 'selfieFaceFile'),
@@ -151,6 +158,7 @@ void main() {
 
     // Force bloc into EkycStepSelfieKtpCompleted state
     ekycBloc.emit(const EkycStepSelfieKtpCompleted(
+      documentType: DocumentType.ktp,
       ktpPath: 'simulated_ktp.jpg',
       croppedFacePath: 'simulated_ktp_face.jpg',
       ocrJsonPath: 'simulated_ocr.json',
@@ -176,6 +184,7 @@ void main() {
     const failure = ServerFailure('Gagal menghubungi server verifikasi.');
 
     when(() => mockVerifyEkycUseCase(
+          documentType: any(named: 'documentType'),
           ktpFile: any(named: 'ktpFile'),
           selfieFile: any(named: 'selfieFile'),
           selfieFaceFile: any(named: 'selfieFaceFile'),
@@ -186,6 +195,7 @@ void main() {
         )).thenAnswer((_) async => const Left(failure));
 
     ekycBloc.emit(const EkycStepSelfieKtpCompleted(
+      documentType: DocumentType.ktp,
       ktpPath: 'simulated_ktp.jpg',
       croppedFacePath: 'simulated_ktp_face.jpg',
       ocrJsonPath: 'simulated_ocr.json',

@@ -90,21 +90,22 @@ class ImageUtils {
     return croppedPath;
   }
 
-  /// Crops the face area from a horizontal KTP image based on the standard card layout.
-  /// (Typically the photo resides on the right side: X ~ 60-95%, Y ~ 15-85%).
-  static Future<File> cropKtpFace(String ktpImagePath) async {
+  /// Crops the face area from a horizontal KTP/SIM/Passport image based on the standard card layout.
+  /// (Typically the photo resides on the right side for KTP: X ~ 60-95%, Y ~ 15-85%,
+  /// or left side for SIM/Passport: X ~ 5-40%, Y ~ 15-85%).
+  static Future<File> cropKtpFace(String ktpImagePath, {bool isFaceOnLeft = false}) async {
     if (ktpImagePath.startsWith('simulated_')) return File('simulated_ktp_face.jpg');
-    final resultPath = await compute(_cropKtpFaceAsync, ktpImagePath);
+    final resultPath = await compute(_cropKtpFaceAsync, _CropFaceCardParams(ktpImagePath, isFaceOnLeft));
     return File(resultPath);
   }
 
-  static String _cropKtpFaceAsync(String ktpImagePath) {
-    if (ktpImagePath.startsWith('simulated_')) return 'simulated_ktp_face.jpg';
-    final file = File(ktpImagePath);
-    if (!file.existsSync()) throw Exception("KTP image file not found");
+  static String _cropKtpFaceAsync(_CropFaceCardParams params) {
+    if (params.imagePath.startsWith('simulated_')) return 'simulated_ktp_face.jpg';
+    final file = File(params.imagePath);
+    if (!file.existsSync()) throw Exception("Document image file not found");
     final bytes = file.readAsBytesSync();
     var image = img.decodeImage(bytes);
-    if (image == null) throw Exception("Failed to decode KTP image");
+    if (image == null) throw Exception("Failed to decode Document image");
     
     // Bake EXIF orientation so pixels are rotated correctly
     image = img.bakeOrientation(image);
@@ -112,10 +113,11 @@ class ImageUtils {
     final width = image.width;
     final height = image.height;
 
-    // Standard coordinates of a face in a horizontal KTP:
-    // X: starts at 60% and spans about 35% of the card width
-    // Y: starts at 15% and spans about 70% of the card height
-    final x = (width * 0.60).toInt();
+    // Standard coordinates of a face in a horizontal card layout:
+    // Left side (SIM/Passport): X starts at 5% and spans about 35% of the card width
+    // Right side (KTP): X starts at 60% and spans about 35% of the card width
+    // Y starts at 15% and spans about 70% of the card height for both
+    final x = params.isFaceOnLeft ? (width * 0.05).toInt() : (width * 0.60).toInt();
     final y = (height * 0.15).toInt();
     final w = (width * 0.35).toInt();
     final h = (height * 0.70).toInt();
@@ -135,8 +137,8 @@ class ImageUtils {
     );
 
     // Save the cropped image in the same directory
-    final extension = ktpImagePath.toLowerCase().endsWith('.png') ? '.png' : '.jpg';
-    final croppedPath = ktpImagePath.replaceAll(extension, '_face$extension');
+    final extension = params.imagePath.toLowerCase().endsWith('.png') ? '.png' : '.jpg';
+    final croppedPath = params.imagePath.replaceAll(extension, '_face$extension');
     final croppedFile = File(croppedPath);
     croppedFile.writeAsBytesSync(img.encodeJpg(croppedImage));
 
@@ -261,4 +263,10 @@ class _CropFaceParams {
   final int height;
   final String suffix;
   _CropFaceParams(this.imagePath, this.left, this.top, this.width, this.height, this.suffix);
+}
+
+class _CropFaceCardParams {
+  final String imagePath;
+  final bool isFaceOnLeft;
+  _CropFaceCardParams(this.imagePath, this.isFaceOnLeft);
 }

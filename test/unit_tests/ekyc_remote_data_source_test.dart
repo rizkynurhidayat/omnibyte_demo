@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -25,6 +24,7 @@ void main() {
       nik: '12345',
       nama: 'Test Name',
       similarityScore: 99.63,
+      verificationResult: 'Auto Approved',
     );
 
     test('should return EkycVerificationModel when status is 200', () async {
